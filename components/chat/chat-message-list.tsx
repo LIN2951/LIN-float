@@ -282,13 +282,13 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
             >
                 <div className="px-5 pt-5 pb-3">
                     <div className="flex items-center justify-between mb-4 mt-2">
-                        <span className="ts-28 font-bold text-[var(--c-text-title)]">Chats</span>
+                        <span className="float-section-kicker">FLOAT / CONNECTION INDEX · 01</span><span className="ts-28 font-bold text-[var(--c-text-title)] float-editorial-heading">消息档案<span className="float-heading-mark">✳</span></span>
                     </div>
                     <div className="chat-search-bar">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--c-icon)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                         <input
                             className="chat-search-input ts-15 w-full bg-transparent outline-none text-[var(--c-text-title)] placeholder:text-[var(--c-icon)]"
-                            placeholder="Search chats..."
+                            placeholder="搜索某个人、某段对话……"
                             value={listFilter}
                             onChange={(e) => setListFilter(e.target.value)}
                         />
