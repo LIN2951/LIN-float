@@ -306,7 +306,7 @@ export const PhoneChatApp = memo(function PhoneChatApp({ onClose, initialSession
 
     return (
         <div
-            className="chat-app absolute inset-0 flex flex-col overflow-hidden z-10"
+            className="chat-app float-editorial-app absolute inset-0 flex flex-col overflow-hidden z-10" data-float-style="archive"
             {...(activeSession || activeMascot ? { "data-room-active": "" } : {})}
             {...(hideTabBar ? { "data-tabbar-hidden": "" } : {})}
         >
