@@ -17,6 +17,14 @@ import {
 import MusicCommentsPage from "./music-comments";
 import MusicArtistPage from "./music-artist";
 import { loadMusicBg, playerBgStyle, MUSIC_BG_EVENT, type MusicBgConfig } from "@/lib/music-bg";
+import { updateTrackMeta } from "@/lib/music-storage";
+import { normalizeSubtitleToLrc } from "@/lib/music-links";
+
+interface CaptionLangInfo {
+    lang: string;
+    label: string;
+    kind: "asr" | "manual";
+}
 
 const PLAY_MODE_ICONS: Record<PlayMode, { svg: string; label: string }> = {
     sequence: {
@@ -274,6 +282,133 @@ export default function MusicPlayer() {
         if (line) player.seek(line.time);
     }, [player]);
 
+    // ── Caption panel (online YouTube captions / file import / Whisper) ──
+    const [showCaptions, setShowCaptions] = useState(false);
+    const [captionTracks, setCaptionTracks] = useState<CaptionLangInfo[]>([]);
+    const [captionLoading, setCaptionLoading] = useState(false);
+    const [captionLang, setCaptionLang] = useState("");
+    const [captionApplying, setCaptionApplying] = useState("");
+    const [whisperEndpoint, setWhisperEndpoint] = useState(() => kvGet("music-whisper-endpoint") || "");
+    const [whisperBusy, setWhisperBusy] = useState(false);
+    const captionFileRef = useRef<HTMLInputElement | null>(null);
+
+    const youtubeVideoId = player.currentTrack?.source === "youtube"
+        ? (player.currentTrack.externalId || player.currentTrack.id.replace(/^yt_/, ""))
+        : "";
+
+    // Reset panel state whenever the track changes.
+    useEffect(() => {
+        setCaptionTracks([]);
+        setCaptionLang("");
+        setShowCaptions(false);
+    }, [player.currentTrack?.id]);
+
+    const applyLyrics = useCallback(async (lrc: string, loadedMessage?: string) => {
+        const current = player.currentTrack;
+        if (!current || !lrc.trim()) {
+            showMusicToast("字幕内容为空", 2400);
+            return;
+        }
+        await updateTrackMeta(current.id, { lyrics: lrc });
+        player.patchTrack(current.id, { lyrics: lrc });
+        setView("lyrics");
+        if (loadedMessage) showMusicToast(loadedMessage, 2600);
+    }, [player, showMusicToast]);
+
+    const openCaptionPanel = useCallback(() => {
+        const videoId = player.currentTrack?.source === "youtube"
+            ? (player.currentTrack.externalId || player.currentTrack.id.replace(/^yt_/, ""))
+            : "";
+        setShowCaptions(true);
+        if (videoId && captionTracks.length === 0) {
+            setCaptionLoading(true);
+            fetch(`/api/music/captions?videoId=${encodeURIComponent(videoId)}&list=1`)
+                .then(r => r.json())
+                .then((data: { ok: boolean; tracks?: CaptionLangInfo[]; message?: string }) => {
+                    if (data.ok && data.tracks) {
+                        setCaptionTracks(data.tracks);
+                        const preferred = data.tracks.find(t => t.lang.toLowerCase().startsWith("ja"));
+                        setCaptionLang(preferred?.lang || data.tracks[0]?.lang || "");
+                    } else {
+                        showMusicToast(data.message || "没有找到在线字幕", 3000);
+                    }
+                })
+                .catch(() => showMusicToast("字幕列表获取失败", 2600))
+                .finally(() => setCaptionLoading(false));
+        }
+    }, [player, captionTracks.length, showMusicToast]);
+
+    const loadOnlineCaption = useCallback(async (lang: string) => {
+        if (!youtubeVideoId) return;
+        setCaptionApplying(lang);
+        try {
+            const res = await fetch(`/api/music/captions?videoId=${encodeURIComponent(youtubeVideoId)}&lang=${encodeURIComponent(lang)}`);
+            const data = await res.json() as { ok: boolean; lrc?: string; message?: string };
+            if (data.ok && data.lrc) {
+                await applyLyrics(data.lrc, `已加载${captionTracks.find(t => t.lang === lang)?.label || lang}字幕`);
+            } else {
+                showMusicToast(data.message || "字幕加载失败", 3000);
+            }
+        } catch {
+            showMusicToast("字幕加载失败，请检查网络", 3000);
+        } finally {
+            setCaptionApplying("");
+        }
+    }, [youtubeVideoId, captionTracks, applyLyrics, showMusicToast]);
+
+    const handleCaptionFile = useCallback((file: File | undefined) => {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            const text = String(reader.result || "");
+            const lrc = normalizeSubtitleToLrc(text);
+            void applyLyrics(lrc, `已导入字幕文件「${file.name}」`);
+        };
+        reader.onerror = () => showMusicToast("字幕文件读取失败", 2600);
+        reader.readAsText(file);
+    }, [applyLyrics, showMusicToast]);
+
+    const runWhisper = useCallback(async () => {
+        const current = player.currentTrack;
+        if (!current) return;
+        const endpoint = whisperEndpoint.trim().replace(/\/+$/, "");
+        if (!/^https?:\/\//i.test(endpoint)) {
+            showMusicToast("请填写自建 Whisper 转写服务的 http(s) 地址", 3200);
+            return;
+        }
+        try { kvSet("music-whisper-endpoint", endpoint); } catch { /* ignore */ }
+        setWhisperBusy(true);
+        try {
+            const res = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    platform: current.source || "local",
+                    url: current.sourceUrl || "",
+                    title: current.title,
+                    externalId: current.externalId || "",
+                }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json() as { lrc?: string; text?: string; lyrics?: string };
+            const lrc = normalizeSubtitleToLrc(data.lrc || data.lyrics || data.text || "");
+            if (!lrc) throw new Error("返回内容为空");
+            await applyLyrics(lrc, "Whisper 转写完成，已载入字幕");
+        } catch (err) {
+            showMusicToast(`转写服务调用失败：${err instanceof Error ? err.message : "未知错误"}`, 3600);
+        } finally {
+            setWhisperBusy(false);
+        }
+    }, [player, whisperEndpoint, applyLyrics, showMusicToast]);
+
+    const clearLyrics = useCallback(async () => {
+        const current = player.currentTrack;
+        if (!current) return;
+        await updateTrackMeta(current.id, { lyrics: "" });
+        player.patchTrack(current.id, { lyrics: "" });
+        showMusicToast("已清除当前字幕", 2200);
+    }, [player, showMusicToast]);
+
     const [liked, setLiked] = useState(false);
     const [showPlaylistPicker, setShowPlaylistPicker] = useState(false);
     const [playlists, setPlaylists] = useState<NeteasePlaylist[]>([]);
@@ -460,6 +595,13 @@ export default function MusicPlayer() {
                     </button>
                 </div>
                 <div className="mp-top-actions">
+                    <button className="music-player-ctrl-btn mp-top-btn" onClick={openCaptionPanel} title="字幕 / CC" data-has-captions={track.lyrics ? "1" : "0"}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+                            <path d="M7 14.2c.5.5 1 .7 1.6.7s1.1-.2 1.6-.7" />
+                            <path d="M13.3 14.2c.5.5 1 .7 1.6.7s1.1-.2 1.6-.7" />
+                        </svg>
+                    </button>
                     <button className="music-player-ctrl-btn mp-top-btn" onClick={togglePlayerStyle} title={playerStyle === "vinyl" ? "切换现代样式" : "切换黑胶样式"}>
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                             <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" />
@@ -745,6 +887,104 @@ export default function MusicPlayer() {
                     artistName={artistView.name}
                     onClose={() => setArtistView(null)}
                 />
+            )}
+
+            {/* Caption / subtitle panel */}
+            {showCaptions && (
+                <div className="music-queue-overlay" onClick={() => setShowCaptions(false)}>
+                    <div className="music-caption-drawer" onClick={e => e.stopPropagation()}>
+                        <div className="music-queue-header">
+                            <span>字幕</span>
+                            {track.lyrics
+                                ? <span className="music-caption-state">已加载字幕</span>
+                                : <span className="music-caption-state music-caption-state-off">未加载</span>}
+                            <button className="music-playlist-picker-close" onClick={() => setShowCaptions(false)}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                            </button>
+                        </div>
+
+                        <div className="music-caption-body">
+                            {/* Online YouTube captions */}
+                            {track.source === "youtube" && (
+                                <div className="music-caption-section">
+                                    <div className="music-caption-section-title">YouTube 在线字幕（日语优先）</div>
+                                    {captionLoading ? (
+                                        <div className="music-caption-hint">正在获取可用字幕语言…</div>
+                                    ) : captionTracks.length === 0 ? (
+                                        <div className="music-caption-hint">没有找到字幕轨，可改用下方手动导入或 AI 转写</div>
+                                    ) : (
+                                        <div className="music-caption-langs">
+                                            {captionTracks.map(t => (
+                                                <button
+                                                    key={`${t.lang}-${t.kind}`}
+                                                    className="music-caption-lang"
+                                                    onClick={() => void loadOnlineCaption(t.lang)}
+                                                    disabled={captionApplying === t.lang}
+                                                >
+                                                    {captionApplying === t.lang ? (
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="music-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                                                    ) : null}
+                                                    <span>{t.label || t.lang}</span>
+                                                    <span className="music-caption-lang-code">{t.lang}{t.kind === "asr" ? " · 自动" : ""}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Manual import */}
+                            <div className="music-caption-section">
+                                <div className="music-caption-section-title">手动导入字幕</div>
+                                <div className="music-caption-row">
+                                    <button className="music-caption-action" onClick={() => captionFileRef.current?.click()}>
+                                        导入 SRT / VTT / LRC 文件
+                                    </button>
+                                    <input
+                                        ref={captionFileRef}
+                                        type="file"
+                                        accept=".srt,.vtt,.lrc,.txt,text/plain"
+                                        hidden
+                                        onChange={e => {
+                                            handleCaptionFile(e.target.files?.[0]);
+                                            e.target.value = "";
+                                        }}
+                                    />
+                                    {track.lyrics && (
+                                        <button className="music-caption-action music-caption-action-ghost" onClick={() => void clearLyrics()}>
+                                            清除字幕
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="music-caption-hint">导入后自动转换为逐行时间轴，随播放高亮滚动</div>
+                            </div>
+
+                            {/* Self-hosted Whisper */}
+                            <div className="music-caption-section">
+                                <div className="music-caption-section-title">AI 转写（Whisper，需自建服务）</div>
+                                <input
+                                    className="music-caption-input"
+                                    placeholder="https://your-server.example.com/transcribe"
+                                    value={whisperEndpoint}
+                                    onChange={e => setWhisperEndpoint(e.target.value)}
+                                    autoCapitalize="off"
+                                    autoCorrect="off"
+                                    spellCheck={false}
+                                />
+                                <button
+                                    className="music-caption-action"
+                                    disabled={whisperBusy}
+                                    onClick={() => void runWhisper()}
+                                >
+                                    {whisperBusy ? "转写中…（长音频可能需要几分钟）" : "调用 AI 服务转写字幕"}
+                                </button>
+                                <div className="music-caption-hint">
+                                    托管服务器无法运行模型，需自备 Whisper 服务：接收链接返回 {"{ lrc }"} 或 {"{ text }"}。
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Add result toast */}

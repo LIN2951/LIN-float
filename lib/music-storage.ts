@@ -2,17 +2,29 @@
 
 import { openIndexedDbAtLeast } from "./idb-open";
 
+export type TrackSource = "local" | "netease" | "youtube" | "dlsite" | "reddit";
+
 export type MusicTrack = {
     id: string;
     title: string;
     artist: string;
     album?: string;
     duration: number;        // seconds
-    coverUrl?: string;       // data URL or blob URL
+    coverUrl?: string;       // data URL, blob URL or remote URL
     lyrics?: string;         // LRC format or plain text
     liked: boolean;
     addedAt: string;         // ISO timestamp
     lastPlayedAt?: string;   // ISO timestamp
+    // ── External link tracks (YouTube / DLsite / Reddit) ──
+    source?: TrackSource;
+    sourceUrl?: string;      // canonical page URL pasted by the user
+    externalId?: string;     // platform-native id (videoId / RJ code / post id)
+    sampleUrl?: string;      // trial/preview stream (DLsite 試聴, etc.)
+    streamUrl?: string;      // best direct stream we know (Reddit DASH audio, etc.)
+    streamFallbackUrl?: string; // secondary stream attempt
+    workTags?: string[];     // platform tags (DLsite genre, etc.)
+    boundAudio?: boolean;    // external track has a purchased/uploaded audio blob
+    captionLangs?: string[]; // cached list of available caption language codes
 };
 
 // ── IndexedDB Setup ──
@@ -60,6 +72,39 @@ export async function saveTrack(track: MusicTrack, audioBlob: Blob): Promise<voi
     const tx = db.transaction([META_STORE, AUDIO_STORE], "readwrite");
     tx.objectStore(META_STORE).put(track);
     tx.objectStore(AUDIO_STORE).put(audioBlob, track.id);
+    await new Promise<void>((res, rej) => {
+        tx.oncomplete = () => res();
+        tx.onerror = () => rej(tx.error);
+    });
+}
+
+/** Persist metadata only — for external link tracks that have no local blob. */
+export async function saveExternalTrack(track: MusicTrack): Promise<void> {
+    const db = await openDb();
+    if (!db) return;
+    const tx = db.transaction(META_STORE, "readwrite");
+    tx.objectStore(META_STORE).put(track);
+    await new Promise<void>((res, rej) => {
+        tx.oncomplete = () => res();
+        tx.onerror = () => rej(tx.error);
+    });
+}
+
+/**
+ * Attach an uploaded audio file to an existing external track
+ * (e.g. binding a purchased DLsite MP3 to its RJ link). The blob is stored
+ * under the track's own id so loadAndPlay finds it like a local track.
+ */
+export async function attachAudioBlob(trackId: string, audioBlob: Blob): Promise<void> {
+    const db = await openDb();
+    if (!db) return;
+    const tx = db.transaction([META_STORE, AUDIO_STORE], "readwrite");
+    const store = tx.objectStore(META_STORE);
+    const existing: MusicTrack | undefined = await runRequest(store.get(trackId));
+    if (existing) {
+        store.put({ ...existing, boundAudio: true, id: trackId });
+    }
+    tx.objectStore(AUDIO_STORE).put(audioBlob, trackId);
     await new Promise<void>((res, rej) => {
         tx.oncomplete = () => res();
         tx.onerror = () => rej(tx.error);

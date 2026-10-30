@@ -3,11 +3,12 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import {
-    loadAllTracks, saveTrack, deleteTrack,
-    generateTrackId, parseFilename, getAudioDuration,
+    loadAllTracks, saveTrack, deleteTrack, saveExternalTrack, attachAudioBlob,
+    updateTrackMeta, generateTrackId, parseFilename, getAudioDuration,
     type MusicTrack,
 } from "@/lib/music-storage";
-import { useMusicControls, type MusicControlsValue } from "@/lib/music-context";
+import { useMusicControls, MUSIC_PLAYBACK_ERROR_EVENT, type MusicControlsValue } from "@/lib/music-context";
+import { detectPlatform, PLATFORM_LABELS, type ParsedLink } from "@/lib/music-links";
 import { SessionCustomCSS } from "@/components/ui/session-custom-css";
 import {
     isNeteaseConfigured, loadMusicApiConfig, saveMusicApiConfig,
@@ -52,7 +53,24 @@ export default function MusicApp({ onClose }: Props) {
     const musicToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const musicLoadingFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [bgCfg, setBgCfg] = useState<MusicBgConfig>(() => loadMusicBg());
+    const [linkInput, setLinkInput] = useState("");
+    const [linkLoading, setLinkLoading] = useState(false);
+    const bindFileRef = useRef<HTMLInputElement | null>(null);
+    const bindTargetRef = useRef<MusicTrack | null>(null);
     const player = useMusicControls();
+
+    // Live platform hint while the user pastes a link.
+    const detectedLink: ParsedLink | null = detectPlatform(linkInput);
+
+    // Surface engine playback errors (missing DLsite sample, Reddit blocks, …)
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const msg = (e as CustomEvent<string>).detail;
+            if (msg) showMusicToast(msg, 3000);
+        };
+        window.addEventListener(MUSIC_PLAYBACK_ERROR_EVENT, handler);
+        return () => window.removeEventListener(MUSIC_PLAYBACK_ERROR_EVENT, handler);
+    }, []);
 
     useEffect(() => {
         const handleBgChange = () => setBgCfg(loadMusicBg());
@@ -181,6 +199,84 @@ export default function MusicApp({ onClose }: Props) {
         setTracks(prev => prev.filter(t => t.id !== trackId));
         if (player.currentTrack?.id === trackId) player.stop();
     };
+
+    // ── Paste-link add (YouTube / DLsite / Reddit) ──
+    const handleAddLink = useCallback(async () => {
+        const parsed = detectPlatform(linkInput);
+        if (!parsed) {
+            showMusicToast("无法识别该链接，支持 YouTube / DLsite / Reddit 链接", 2800);
+            return;
+        }
+        if (tracks.some(t => t.id === parsed.trackId)) {
+            showMusicToast("这个链接已经在音乐库里了", 2400);
+            return;
+        }
+        setLinkLoading(true);
+        try {
+            const res = await fetch(`/api/music/resolve?url=${encodeURIComponent(parsed.canonicalUrl)}`);
+            const data = await res.json() as {
+                ok: boolean;
+                playable: boolean;
+                message?: string;
+                track?: Omit<MusicTrack, "liked" | "addedAt">;
+            };
+            if (!data.ok || !data.track) {
+                showMusicToast(data.message || "链接解析失败，请稍后重试", 3200);
+                return;
+            }
+            const track: MusicTrack = {
+                ...data.track,
+                liked: false,
+                addedAt: new Date().toISOString(),
+            };
+            await saveExternalTrack(track);
+            setTracks(prev => prev.some(t => t.id === track.id) ? prev : [track, ...prev]);
+            setLinkInput("");
+            showMusicToast(data.message || `已添加「${track.title}」`, 3000);
+        } catch {
+            showMusicToast("链接解析失败，请检查网络后重试", 3000);
+        } finally {
+            setLinkLoading(false);
+        }
+    }, [linkInput, tracks, showMusicToast]);
+
+    // ── Bind an uploaded purchased MP3 to an external (DLsite) track ──
+    const openBindFilePicker = useCallback((track: MusicTrack) => {
+        bindTargetRef.current = track;
+        bindFileRef.current?.click();
+    }, []);
+
+    const handleBindFileChange = useCallback(async (files: FileList | null) => {
+        const target = bindTargetRef.current;
+        if (!files || files.length === 0 || !target) {
+            bindTargetRef.current = null;
+            if (bindFileRef.current) bindFileRef.current.value = "";
+            return;
+        }
+        const file = files[0];
+        const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+        const audioExts = ["mp3", "m4a", "aac", "ogg", "wav", "flac", "wma", "opus"];
+        if (!file.type.startsWith("audio/") && !audioExts.includes(ext)) {
+            showMusicToast("请选择音频文件（MP3 / M4A / FLAC 等）", 2800);
+        } else {
+            try {
+                const duration = await getAudioDuration(file);
+                await attachAudioBlob(target.id, file);
+                await updateTrackMeta(target.id, {
+                    boundAudio: true,
+                    duration: duration || target.duration,
+                });
+                const patch = { boundAudio: true as const, duration: duration || target.duration };
+                setTracks(prev => prev.map(t => t.id === target.id ? { ...t, ...patch } : t));
+                player.patchTrack(target.id, patch);
+                showMusicToast(`已绑定正版音频，点击即可播放完整版「${target.title}」`, 3200);
+            } catch {
+                showMusicToast("音频保存失败，请重试", 2800);
+            }
+        }
+        bindTargetRef.current = null;
+        if (bindFileRef.current) bindFileRef.current.value = "";
+    }, [player, showMusicToast]);
 
     /** Convert NeteaseSearchResult → MusicTrack */
     const toMusicTrack = useCallback((r: NeteaseSearchResult, extra?: { lyrics?: string; coverUrl?: string; name?: string; artists?: string }): MusicTrack => ({
@@ -370,14 +466,70 @@ export default function MusicApp({ onClose }: Props) {
                 <>
                     {/* Header Action: Upload Area inside the tab - Removed inline version */}
                     <input ref={fileInputRef} type="file" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.flac" multiple hidden onChange={(e) => handleUpload(e.target.files)} />
+                    {/* Hidden picker for binding a purchased MP3 to a DLsite track */}
+                    <input ref={bindFileRef} type="file" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.flac" hidden onChange={(e) => handleBindFileChange(e.target.files)} />
+
+                    {/* Paste-link add: YouTube / DLsite / Reddit */}
+                    <div className="music-link-add">
+                        <div className="music-link-row">
+                            <svg className="music-link-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                            </svg>
+                            <input
+                                className="music-link-input"
+                                placeholder="粘贴 YouTube / DLsite / Reddit 链接"
+                                value={linkInput}
+                                onChange={(e) => setLinkInput(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter" && !linkLoading) void handleAddLink(); }}
+                                autoCapitalize="off"
+                                autoCorrect="off"
+                                spellCheck={false}
+                            />
+                            {linkInput && (
+                                <button className="music-link-clear" onClick={() => setLinkInput("")} title="清空" type="button">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                </button>
+                            )}
+                            <button
+                                className="music-link-btn"
+                                onClick={() => void handleAddLink()}
+                                disabled={linkLoading || !detectedLink}
+                                title={detectedLink ? `添加 ${PLATFORM_LABELS[detectedLink.platform]} 链接` : "先粘贴可识别的链接"}
+                                type="button"
+                            >
+                                {linkLoading ? (
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="music-spin">
+                                        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                                    </svg>
+                                ) : "添加"}
+                            </button>
+                        </div>
+                        <div className="music-link-hint">
+                            {detectedLink ? (
+                                <>
+                                    <span className="music-source-chip" data-source={detectedLink.platform}>
+                                        {PLATFORM_LABELS[detectedLink.platform]}
+                                    </span>
+                                    <span className="music-link-hint-text">
+                                        {detectedLink.platform === "youtube" && "识别为 YouTube 视频，播放时自动抓取日语字幕"}
+                                        {detectedLink.platform === "dlsite" && "识别为 DLsite 作品，可播试听，可上传正版 MP3 绑定完整版"}
+                                        {detectedLink.platform === "reddit" && "识别为 Reddit 帖子，将尝试播放其音轨"}
+                                    </span>
+                                </>
+                            ) : (
+                                <span className="music-link-hint-text">支持 youtu.be / dlsite.com 作品页 / reddit 帖子链接</span>
+                            )}
+                        </div>
+                    </div>
 
                     {/* Song list */}
                     {loading ? (
                         <div className="music-empty"><div className="music-empty-text">加载中...</div></div>
                     ) : tracks.length === 0 ? (
-                        <div className="music-empty"><div className="music-empty-icon">♪</div><div className="music-empty-text">还没有音乐</div></div>
+                        <div className="music-empty"><div className="music-empty-icon">♪</div><div className="music-empty-text">还没有音乐</div><div className="music-empty-sub">粘贴链接或上传本地音频开始</div></div>
                     ) : (
-                        <SongList tracks={tracks} player={player} formatTime={formatTime} onDelete={handleDelete} onPlay={handlePlay} />
+                        <SongList tracks={tracks} player={player} formatTime={formatTime} onDelete={handleDelete} onPlay={handlePlay} onBindAudio={openBindFilePicker} />
                     )}
                 </>
             )}
@@ -1144,12 +1296,32 @@ function NeteaseSongRow({ song, index, formatTime, onPlay }: {
 }
 
 // ── Song List (local) ──
-function SongList({ tracks, player, formatTime, onDelete, onPlay }: {
+function SourceBadges({ track }: { track: MusicTrack }) {
+    if (!track.source || track.source === "local" || track.source === "netease") return null;
+    return (
+        <div className="music-song-sources">
+            <span className="music-source-chip" data-source={track.source}>
+                {PLATFORM_LABELS[track.source]}
+            </span>
+            {track.source === "dlsite" && (
+                track.boundAudio
+                    ? <span className="music-source-chip music-source-chip-bound">完整版已绑定</span>
+                    : <span className="music-source-chip music-source-chip-trial">试听</span>
+            )}
+            {track.source === "reddit" && !track.streamUrl && !track.streamFallbackUrl && (
+                <span className="music-source-chip music-source-chip-trial">无音轨</span>
+            )}
+        </div>
+    );
+}
+
+function SongList({ tracks, player, formatTime, onDelete, onPlay, onBindAudio }: {
     tracks: MusicTrack[];
     player: MusicControlsValue;
     formatTime: (s: number) => string;
     onDelete: (id: string, e: React.MouseEvent) => void;
     onPlay: (t: MusicTrack) => void;
+    onBindAudio: (t: MusicTrack) => void;
 }) {
     const [deleteTarget, setDeleteTarget] = useState<MusicTrack | null>(null);
 
@@ -1157,6 +1329,7 @@ function SongList({ tracks, player, formatTime, onDelete, onPlay }: {
         <div className="music-list">
             {tracks.map((track, idx) => {
                 const isCurrent = player.currentTrack?.id === track.id;
+                const canBind = track.source === "dlsite";
                 return (
                     <div key={track.id} className="music-song" {...(isCurrent ? { "data-playing": "" } : {})} style={{ animationDelay: `${Math.min(idx * 0.04, 0.5)}s` }} onClick={() => onPlay(track)}>
                         <div className="music-song-cover">
@@ -1174,9 +1347,22 @@ function SongList({ tracks, player, formatTime, onDelete, onPlay }: {
                         <div className="music-song-info">
                             <div className="music-song-title">{track.title}</div>
                             <div className="music-song-artist">{track.artist}</div>
+                            <SourceBadges track={track} />
                         </div>
                         <div className="music-song-duration">{formatTime(track.duration)}</div>
                         <div className="music-song-actions">
+                            {canBind && (
+                                <button
+                                    className="music-song-action-btn"
+                                    data-bind=""
+                                    onClick={(e) => { e.stopPropagation(); onBindAudio(track); }}
+                                    title={track.boundAudio ? "重新绑定正版音频文件" : "上传购买的正版 MP3，绑定后播放完整版"}
+                                >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+                                    </svg>
+                                </button>
+                            )}
                             <button className="music-song-action-btn" data-danger="" onClick={(e) => { e.stopPropagation(); setDeleteTarget(track); }}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                                     <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -1193,7 +1379,10 @@ function SongList({ tracks, player, formatTime, onDelete, onPlay }: {
                     <div className="music-settings-modal-dialog music-confirm-dialog" onClick={e => e.stopPropagation()}>
                         <div className="music-settings-header"><h2>删除确认</h2></div>
                         <div className="music-settings-body">
-                            <div className="music-confirm-text">确定删除「{deleteTarget.title}」吗？</div>
+                            <div className="music-confirm-text">
+                                确定删除「{deleteTarget.title}」吗？
+                                {deleteTarget.boundAudio ? "绑定的本地音频也会一并删除。" : ""}
+                            </div>
                             <div className="music-settings-actions">
                                 <button className="music-settings-btn" onClick={() => setDeleteTarget(null)}>取消</button>
                                 <button className="music-settings-btn music-settings-btn-danger" onClick={(e) => { onDelete(deleteTarget.id, e); setDeleteTarget(null); }}>删除</button>
