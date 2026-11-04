@@ -138,7 +138,48 @@
     background: #000;
     aspect-ratio: 16 / 9;
   }
-  .player iframe, .player video { width: 100%; height: 100%; border: 0; display: block; }
+  .player iframe, .player video { width: 100%; height: 100%; border: 0; display: block; background: #000; }
+  .player.landscape { aspect-ratio: 16 / 9; }
+  .player.portrait { aspect-ratio: 9 / 16; width: min(100%, 40vh); max-height: 68vh; margin: 0 auto; }
+  .player:fullscreen, .player:-webkit-full-screen { aspect-ratio: auto; width: 100%; height: 100%; max-height: none; margin: 0; }
+
+  .mode-toggle { padding: 12px 16px 0; }
+  .mode-toggle[hidden] { display: none; }
+  .mode-toggle .seg {
+    display: flex;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    overflow: hidden;
+  }
+  .mode-toggle .seg button {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 9px 0;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .mode-toggle .seg button.active { background: var(--accent); color: #1a0d13; font-weight: 650; }
+
+  .video-ctl { display: none; gap: 8px; }
+  .video-ctl.show { display: inline-flex; }
+
+  .subpanel {
+    display: none;
+    padding: 14px 16px;
+    border-top: 1px solid var(--line);
+    max-height: 260px;
+    overflow: auto;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #c9c9d2;
+  }
+  .subpanel.show { display: block; }
+  .subpanel .cap-line { margin-bottom: 6px; }
+  .subpanel .cap-line b { color: var(--accent); margin-right: 8px; font-weight: 600; }
 
   .actions {
     display: flex;
@@ -241,12 +282,24 @@
         <div class="tags" id="tags"></div>
       </div>
     </div>
-    <div class="player" id="player"></div>
+    <div class="mode-toggle" id="modeToggle" hidden>
+      <div class="seg">
+        <button id="modeAudio" type="button" class="active">音频</button>
+        <button id="modeVideo" type="button">视频</button>
+      </div>
+    </div>
+    <div class="player landscape" id="player"></div>
     <div class="actions">
       <a id="openLink" href="#" target="_blank" rel="noopener">打开原页面 ↗</a>
-      <button id="favoriteBtn">收藏</button>
-      <button id="closeBtn" class="danger">关闭</button>
+      <span class="video-ctl" id="videoCtl">
+        <button id="fsBtn" type="button">全屏播放</button>
+        <button id="fsPortraitBtn" type="button">竖屏全屏</button>
+      </span>
+      <button id="capBtn" type="button">字幕</button>
+      <button id="favoriteBtn" type="button">收藏</button>
+      <button id="closeBtn" type="button" class="danger">关闭</button>
     </div>
+    <div class="subpanel" id="subpanel"></div>
   </div>
 
   <div class="note" id="note"></div>
@@ -267,7 +320,12 @@
   var input = $("linkInput"), addBtn = $("addBtn"), hint = $("hint");
   var card = $("card"), cover = $("cover"), titleEl = $("title"), artistEl = $("artist"), tagsEl = $("tags");
   var player = $("player"), openLink = $("openLink"), note = $("note"), listEl = $("list");
+  var modeToggle = $("modeToggle"), modeAudio = $("modeAudio"), modeVideo = $("modeVideo");
+  var videoCtl = $("videoCtl"), fsBtn = $("fsBtn"), fsPortraitBtn = $("fsPortraitBtn");
+  var capBtn = $("capBtn"), subpanel = $("subpanel");
   var current = null;
+  var currentMode = "audio";
+  var transcriptFetched = false;
 
   // ── 平台识别 ──
   function detect(raw) {
@@ -390,6 +448,79 @@
     }).catch(function () { return null; });
   }
 
+  // ── YouTube 播放器 / 字幕 ──
+  function ytEmbedSrc(id) {
+    var params = { autoplay: 1, rel: 0, playsinline: 1, modestbranding: 1, cc_load_policy: 1, cc_lang_pref: "ja", hl: "ja" };
+    return "https://www.youtube.com/embed/" + id + "?" +
+      Object.keys(params).map(function (k) { return k + "=" + encodeURIComponent(params[k]); }).join("&");
+  }
+
+  function renderYoutubePlayer(det) {
+    player.className = "player landscape";
+    player.innerHTML = "";
+    var ifr = document.createElement("iframe");
+    ifr.src = ytEmbedSrc(det.id);
+    ifr.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+    ifr.allowFullscreen = true;
+    ifr.setAttribute("title", "video player");
+    player.appendChild(ifr);
+  }
+
+  function formatTime(sec) {
+    var m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+    return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function fetchTranscript(id) {
+    var langs = ["ja", "zh-Hans", "en"];
+    var proxies = [
+      function (u) { return "https://api.allorigins.win/raw?url=" + encodeURIComponent(u); },
+      function (u) { return "https://corsproxy.io/?url=" + encodeURIComponent(u); }
+    ];
+    function attempt(langIdx, proxyIdx) {
+      if (langIdx >= langs.length) return Promise.reject(new Error("no captions"));
+      var lang = langs[langIdx];
+      var tt = "https://www.youtube.com/api/timedtext?v=" + id + "&lang=" + lang + "&fmt=json3";
+      return fetch(proxies[proxyIdx](tt))
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+        .then(function (j) {
+          if (!j || !Array.isArray(j.events) || !j.events.length) return Promise.reject();
+          var lines = [];
+          j.events.forEach(function (ev) {
+            if (ev.segs) {
+              var txt = ev.segs.map(function (s) { return s.utf8 || ""; }).join("");
+              if (txt) lines.push({ t: ev.tStartMs ? Math.round(ev.tStartMs / 1000) : 0, text: txt });
+            }
+          });
+          return { lang: lang, lines: lines };
+        })
+        .catch(function () {
+          if (proxyIdx + 1 < proxies.length) return attempt(langIdx, proxyIdx + 1);
+          return attempt(langIdx + 1, 0);
+        });
+    }
+    return attempt(0, 0);
+  }
+
+  function renderTranscript(data) {
+    subpanel.innerHTML = "";
+    var h = document.createElement("div");
+    h.style.cssText = "margin-bottom:8px;color:var(--accent);font-weight:650;";
+    h.textContent = "字幕文本（" + data.lang + "）";
+    subpanel.appendChild(h);
+    data.lines.forEach(function (l) {
+      var d = document.createElement("div");
+      d.className = "cap-line";
+      var b = document.createElement("b");
+      b.textContent = formatTime(l.t);
+      d.appendChild(b);
+      d.appendChild(document.createTextNode(l.text));
+      subpanel.appendChild(d);
+    });
+    subpanel.classList.add("show");
+    transcriptFetched = true;
+  }
+
   // ── 渲染 ──
   function renderResult(det, meta) {
     current = { platform: det.platform, id: det.id, canonical: det.canonical, meta: meta };
@@ -406,17 +537,24 @@
     cover.onload = function () { this.style.visibility = "visible"; };
 
     player.innerHTML = "";
+    player.className = "player landscape";
+    modeToggle.hidden = true;
+    capBtn.style.display = "none";
+    subpanel.classList.remove("show");
+    subpanel.innerHTML = "";
+    transcriptFetched = false;
+    setMode("audio");
 
     if (det.platform === "youtube") {
-      var ifr = document.createElement("iframe");
-      ifr.src = "https://www.youtube.com/embed/" + det.id +
-        "?autoplay=1&rel=0&playsinline=1&modestbranding=1&cc_load_policy=1&cc_lang_pref=ja&hl=ja";
-      ifr.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
-      ifr.allowFullscreen = true;
-      ifr.setAttribute("title", "player");
-      player.appendChild(ifr);
+      modeToggle.hidden = false;
+      capBtn.style.display = "";
+      renderYoutubePlayer(det);
       note.classList.add("show");
-      note.textContent = "字幕：播放器右下角「CC」按钮可开关，已默认日语优先。注意 YouTube 官方/自动字幕在不少音声视频上可能缺失，属正常。";
+      note.textContent = "上方可切换 音频 / 视频 模式；视频模式支持全屏与竖屏全屏。字幕默认日语优先（播放器右下角 CC），下方「字幕」按钮可尝试抓取字幕文本。";
+      fetchTranscript(det.id).then(renderTranscript).catch(function () {
+        subpanel.innerHTML = "";
+        subpanel.classList.remove("show");
+      });
     } else if (det.platform === "reddit" && meta.video) {
       var v = document.createElement("video");
       v.src = meta.video;
@@ -511,7 +649,72 @@
   $("closeBtn").addEventListener("click", function () {
     card.classList.remove("show");
     player.innerHTML = "";
+    modeToggle.hidden = true;
+    videoCtl.classList.remove("show");
+    capBtn.style.display = "none";
+    subpanel.classList.remove("show");
+    subpanel.innerHTML = "";
+    transcriptFetched = false;
     current = null;
+  });
+
+  // ── 播放模式切换 / 全屏 / 字幕 ──
+  function setMode(mode) {
+    currentMode = mode;
+    modeAudio.classList.toggle("active", mode === "audio");
+    modeVideo.classList.toggle("active", mode === "video");
+    videoCtl.classList.toggle("show", mode === "video");
+    if (mode === "audio") {
+      player.classList.remove("portrait");
+      player.classList.add("landscape");
+    }
+  }
+
+  modeAudio.addEventListener("click", function () { setMode("audio"); });
+  modeVideo.addEventListener("click", function () { setMode("video"); });
+
+  function requestFullscreen(portrait) {
+    if (portrait) {
+      player.classList.remove("landscape");
+      player.classList.add("portrait");
+    } else {
+      player.classList.remove("portrait");
+      player.classList.add("landscape");
+    }
+    var fs = player.requestFullscreen || player.webkitRequestFullscreen || player.msRequestFullscreen;
+    if (fs) { fs.call(player); }
+    else { toast("当前浏览器不支持全屏"); }
+  }
+
+  fsBtn.addEventListener("click", function () { requestFullscreen(false); });
+  fsPortraitBtn.addEventListener("click", function () { requestFullscreen(true); });
+
+  function onFsExit() {
+    if (!(document.fullscreenElement || document.webkitFullscreenElement)) {
+      player.classList.remove("portrait");
+      player.classList.add("landscape");
+    }
+  }
+  document.addEventListener("fullscreenchange", onFsExit);
+  document.addEventListener("webkitfullscreenchange", onFsExit);
+
+  capBtn.addEventListener("click", function () {
+    if (!current || current.platform !== "youtube") { toast("暂仅支持 YouTube 字幕"); return; }
+    if (transcriptFetched) {
+      subpanel.classList.toggle("show");
+      return;
+    }
+    capBtn.textContent = "抓取中…";
+    fetchTranscript(current.id).then(function (data) {
+      renderTranscript(data);
+      capBtn.textContent = "字幕";
+    }).catch(function () {
+      subpanel.innerHTML = "";
+      subpanel.classList.remove("show");
+      transcriptFetched = false;
+      capBtn.textContent = "字幕";
+      toast("自动抓取字幕失败，请用播放器右下角 CC 按钮查看");
+    });
   });
 
   listEl.addEventListener("click", function (e) {
