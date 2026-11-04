@@ -5,6 +5,7 @@ export type IconId =
   | "favorites"
   | "diary"
   | "music"
+  | "drama"
   | "reading"
   | "cocreate"
   | "story"
@@ -56,7 +57,7 @@ export type IconMeta = {
   path?: string;
 };
 
-export const PAGE_1_DEFAULT: IconId[] = ["chat", "favorites", "diary", "music", "calendar", "checkphone", "shopping", "reading", "interview_magazine"];
+export const PAGE_1_DEFAULT: IconId[] = ["chat", "favorites", "diary", "music", "drama", "calendar", "checkphone", "shopping", "reading", "interview_magazine"];
 
 export const PAGE_2_DEFAULT: IconId[] = [
   "cocreate",
@@ -79,6 +80,7 @@ export const ICONS: Record<IconId, IconMeta> = {
   favorites: { id: "favorites", label: "收藏", tone: "var(--c-icon-amber)", placeholder: false },
   diary: { id: "diary", label: "手记", tone: "var(--c-icon-violet)", placeholder: false },
   music: { id: "music", label: "\u97F3\u4E50", tone: "var(--c-icon-coral)", placeholder: false },
+  drama: { id: "drama", label: "\u5E7F\u64AD\u5267", tone: "#e682b4", placeholder: false },
   reading: { id: "reading", label: "\u9605\u8BFB", tone: "var(--c-icon-amber)", placeholder: false },
   cocreate: { id: "cocreate", label: "共创", tone: "var(--c-icon-cocreate, #c8b58a)", placeholder: false },
   story: { id: "story", label: "\u5267\u60C5", tone: "var(--c-icon-story, #8b6f52)", placeholder: false },

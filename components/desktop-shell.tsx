@@ -17,6 +17,7 @@ import MusicApp from "@/components/music/music-app";
 import MusicPlayer from "@/components/music/music-player";
 import MusicFloat from "@/components/music/music-float";
 import OtomeVideoOverlay from "@/components/music/otome-video-overlay";
+import DramaApp from "@/components/drama/drama-app";
 import MiniAppWindow from "@/components/music/mini-app-window";
 import { PhoneCalendarApp } from "@/components/calendar-app";
 import { PhoneQaApp } from "@/components/phone-qa-app";
@@ -1038,7 +1039,7 @@ const MusicShellOverlays = memo(function MusicShellOverlays({
   return (
     <>
       {musicPlayer?.showFullPlayer && musicPlayer.currentTrack && <MusicPlayer />}
-      <MusicFloat hidden={activeApp === "music" || musicPlayer?.showFullPlayer} />
+      <MusicFloat hidden={activeApp === "music" || activeApp === "drama" || musicPlayer?.showFullPlayer} />
       <OtomeVideoOverlay />
     </>
   );
@@ -4055,6 +4056,10 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
 
     if (activeApp === "music") {
       return <MusicApp onClose={() => setActiveApp(null)} />;
+    }
+
+    if (activeApp === "drama") {
+      return <DramaApp onClose={() => setActiveApp(null)} />;
     }
 
     if (activeApp === "calendar") {
