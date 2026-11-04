@@ -16,6 +16,7 @@ import { PhonePlaceholderApp } from "@/components/phone-placeholder-app";
 import MusicApp from "@/components/music/music-app";
 import MusicPlayer from "@/components/music/music-player";
 import MusicFloat from "@/components/music/music-float";
+import OtomeVideoOverlay from "@/components/music/otome-video-overlay";
 import MiniAppWindow from "@/components/music/mini-app-window";
 import { PhoneCalendarApp } from "@/components/calendar-app";
 import { PhoneQaApp } from "@/components/phone-qa-app";
@@ -1038,6 +1039,7 @@ const MusicShellOverlays = memo(function MusicShellOverlays({
     <>
       {musicPlayer?.showFullPlayer && musicPlayer.currentTrack && <MusicPlayer />}
       <MusicFloat hidden={activeApp === "music" || musicPlayer?.showFullPlayer} />
+      <OtomeVideoOverlay />
     </>
   );
 });

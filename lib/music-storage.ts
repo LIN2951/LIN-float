@@ -10,6 +10,12 @@ export type MusicTrack = {
     duration: number;        // seconds
     coverUrl?: string;       // data URL or blob URL
     lyrics?: string;         // LRC format or plain text
+    source?: "youtube" | "dlsite" | "reddit"; // external-link platform
+    externalId?: string;     // YouTube videoId / DLsite RJ code / Reddit post id
+    streamUrl?: string;      // direct stream URL (reddit audio / misc)
+    streamFallbackUrl?: string;
+    sampleUrl?: string;      // DLsite trial clip
+    canonicalUrl?: string;   // canonical page URL to reopen the source
     liked: boolean;
     addedAt: string;         // ISO timestamp
     lastPlayedAt?: string;   // ISO timestamp

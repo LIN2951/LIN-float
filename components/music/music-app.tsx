@@ -26,6 +26,7 @@ import {
 } from "@/lib/music-service";
 import { clearMusicCloudSyncData } from "@/lib/chat-engine";
 import MusicCommentsPage from "./music-comments";
+import OtomePlayerView from "./otome-player-view";
 import {
     loadMusicBg, saveMusicBg, clearMusicBg, fileToCompressedDataUrl, appBgStyle,
     MUSIC_BG_EVENT, type MusicBgConfig, type MusicPlayerBgMode,
@@ -40,6 +41,7 @@ export default function MusicApp({ onClose }: Props) {
     const [tab, setTab] = useState<TabId>("local");
     const [hasNetease, setHasNetease] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
+    const [showOtomePlayer, setShowOtomePlayer] = useState(false);
     const [showCssEditor, setShowCssEditor] = useState(false);
     const [customCss, setCustomCss] = useState("");
     const [activePlaylist, setActivePlaylist] = useState<NeteasePlaylist | null>(null);
@@ -277,6 +279,15 @@ export default function MusicApp({ onClose }: Props) {
         }
     };
 
+    if (showOtomePlayer) {
+        return (
+            <div className="music-app" style={appBgStyle(bgCfg)} {...(player.currentTrack ? { "data-nowbar": "" } : {})}>
+                {customCss && <SessionCustomCSS css={customCss} scope=".music-app" />}
+                <OtomePlayerView onBack={() => setShowOtomePlayer(false)} />
+            </div>
+        );
+    }
+
     return (
         <div className="music-app" style={appBgStyle(bgCfg)} {...(player.currentTrack ? { "data-nowbar": "" } : {})}>
             {customCss && <SessionCustomCSS css={customCss} scope=".music-app" />}
@@ -310,7 +321,7 @@ export default function MusicApp({ onClose }: Props) {
                     {dailyView ? "每日推荐" : activePlaylist && tab === "recommend" ? "歌单详情" : tab === "recommend" ? "" : tab === "search" ? "搜索" : tab === "mine" ? "我的" : "本地音乐"}
                 </div>
                 <div className="music-header-right">
-                    <button className="music-header-action" onClick={() => window.open("/otome-player.html", "_blank", "noopener,noreferrer")} title="乙女抓播放器">
+                    <button className="music-header-action" onClick={() => setShowOtomePlayer(true)} title="乙女抓播放器">
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
                         </svg>
