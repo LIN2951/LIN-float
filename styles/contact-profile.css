@@ -1,0 +1,40 @@
+.contact-profile-page > .page-body { padding-top: calc(var(--page-header-safe-top,48px) + var(--page-header-content-height,54px)); background: var(--c-page-body-bg,#f4f4f4); }
+.contact-profile-identity { display: flex; align-items: flex-start; gap: 18px; padding: 26px 24px 30px; background: var(--c-panel,#fff); }
+.contact-profile-avatar { width: 68px; height: 68px; flex: 0 0 68px; border-radius: 10px; overflow: hidden; background: var(--c-input,#eee); display: grid; place-items: center; color: var(--c-text,#555); }
+.contact-profile-avatar > img,.contact-profile-avatar > svg { width: 100%; height: 100%; object-fit: cover; }
+.contact-profile-info { flex: 1; min-width: 0; }
+.contact-profile-info h1 { margin: 0 0 12px; font-size: calc(21px * var(--app-text-scale,1)); font-weight: 600; color: var(--c-text-title,#222); overflow-wrap: anywhere; }
+.contact-profile-info dl { margin: 0; display: flex; flex-direction: column; gap: 8px; font-size: calc(12px * var(--app-text-scale,1)); line-height: 1.6; }
+.contact-profile-info dl > div { display: flex; gap: 8px; }
+.contact-profile-info dt { flex: 0 0 42px; color: var(--c-icon,#888); }
+.contact-profile-info dd { margin: 0; min-width: 0; color: var(--c-text,#444); overflow-wrap: anywhere; }
+.contact-profile-section { margin-top: 9px; background: var(--c-panel,#fff); }
+.contact-profile-section button { border: 0; background: transparent; font: inherit; cursor: pointer; color: var(--c-text,#333); }
+.contact-profile-moments { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 92px; padding: 18px 24px; text-align: left; font-size: calc(14px * var(--app-text-scale,1)) !important; }
+.contact-profile-moment-previews { display: flex; flex: 1; min-width: 0; gap: 6px; overflow: hidden; }
+.contact-profile-moment-previews > span { width: 48px; height: 48px; flex: 0 1 48px; padding: 5px; background: var(--c-input,#f5f5f5); font-size: 9px; line-height: 1.5; overflow: hidden; overflow-wrap: anywhere; }
+.contact-profile-moment-previews > span:has(img) { padding: 0; }
+.contact-profile-moment-previews img { width: 100%; height: 100%; object-fit: cover; }
+.contact-profile-moment-previews small { color: var(--c-icon,#888); }
+.contact-profile-actions > button { width: 100%; min-height: 58px; display: flex; justify-content: center; align-items: center; gap: 10px; color: var(--c-action-blue,#576b95); font-size: calc(15px * var(--app-text-scale,1)); font-weight: 500; }
+.contact-profile-actions > button + button { border-top: 1px solid var(--c-border,#eee); }
+.contact-profile-call-options { display: flex; gap: 10px; padding: 10px 18px 18px; }
+.contact-profile-call-options > button { flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; background: var(--c-input,#f3f3f3); font-size: 13px; }
+.contact-moments-header { margin-bottom: 18px; }
+.contact-moments-cover { display: block; position: relative; width: 100%; height: calc(var(--page-header-safe-top,48px) + var(--page-header-content-height,54px) + 176px); padding: 0; border: 0; background: linear-gradient(150deg,#9caaa7,#6d807d); cursor: pointer; color: #fff; }
+.contact-moments-cover > img { width: 100%; height: 100%; object-fit: cover; }
+.contact-moments-cover > span { position: absolute; inset: 0; display: grid; align-content: center; padding-top: 80px; font-size: 12px; opacity: .85; }
+.contact-moments-identity { position: relative; display: flex; justify-content: flex-end; align-items: flex-start; gap: 16px; padding: 0 22px; margin-top: -34px; pointer-events: none; }
+.contact-moments-identity > strong { padding-top: 5px; max-width: 70%; overflow-wrap: anywhere; color: #fff; text-shadow: 0 1px 4px #0008; font-size: calc(18px * var(--app-text-scale,1)); }
+.contact-moments-identity .contact-profile-avatar { box-shadow: 0 0 0 3px var(--c-page-body-bg,#fff); }
+.contact-moments-signature { padding: 14px 24px 2px; text-align: right; }
+.contact-moments-signature > button,.contact-moments-signature > input { border: 0; background: transparent; color: var(--c-text,#777); font: inherit; font-size: calc(12px * var(--app-text-scale,1)); line-height: 1.7; overflow-wrap: anywhere; }
+.contact-moments-signature > button { cursor: pointer; white-space: pre-wrap; text-align: right; }
+.contact-moments-signature > input { width: 100%; outline: none; text-align: right; border-bottom: 1px solid var(--c-border,#ddd); }
+.character-moments-actions { padding: 4px 22px 12px; text-align: right; font-size: 12px; color: var(--c-text,#555); }
+.character-moments-actions button { font: inherit; padding: 7px 10px; border: 0; border-radius: 7px; margin: 4px; color: var(--c-action-blue,#576b95); background: var(--c-input,#f4f4f4); cursor: pointer; }
+.character-moments-actions button:disabled { opacity: .45; cursor: default; }
+.character-moments-actions section { margin-top: 8px; padding: 12px; border: 1px solid var(--c-border,#ddd); border-radius: 10px; text-align: left; }
+.character-moments-actions textarea,.character-moments-actions input { box-sizing: border-box; width: 100%; padding: 8px; font: inherit; background: var(--c-panel,#fff); color: inherit; border: 1px solid var(--c-border,#ddd); border-radius: 7px; }
+.character-moments-actions img { display: block; width: 100%; max-height: 230px; object-fit: cover; border-radius: 8px; margin-top: 10px; }
+.character-moments-actions p { line-height: 1.7; white-space: pre-wrap; }

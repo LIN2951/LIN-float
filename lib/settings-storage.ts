@@ -18,6 +18,7 @@ import type {
 } from "./settings-types";
 import type { UserIdentity } from "@/components/settings/user-identity";
 import { createBuiltinPreset, BUILTIN_PRESET_VERSION } from "./builtin-preset";
+import { normalizeFaceCrop } from "./face-crop";
 import {
     NOVELAI_DEFAULT_MODEL,
     NOVELAI_DEFAULT_NOISE_SCHEDULE,
@@ -775,7 +776,6 @@ function normalizeImageGenerationSettings(settings: Partial<ImageGenerationSetti
     for (const [characterId, rawRef] of Object.entries(rawRefs)) {
         if (!rawRef || typeof rawRef !== "object") continue;
         const crop = rawRef.faceCrop;
-        const size = crop && typeof crop.size === "number" ? Math.max(0.18, Math.min(1, crop.size)) : 0.46;
         refs[characterId] = {
             assetId: typeof rawRef.assetId === "string" && rawRef.assetId ? rawRef.assetId : undefined,
             updatedAt: typeof rawRef.updatedAt === "number" ? rawRef.updatedAt : Date.now(),
@@ -783,13 +783,7 @@ function normalizeImageGenerationSettings(settings: Partial<ImageGenerationSetti
             novelAiFeaturePromptEnabled: rawRef.novelAiFeaturePromptEnabled !== false,
             enabled: rawRef.enabled !== false,
             selfieOnly: rawRef.selfieOnly !== false,
-            faceCrop: crop && typeof crop.x === "number" && typeof crop.y === "number"
-                ? {
-                    x: Math.max(0, Math.min(1, crop.x)),
-                    y: Math.max(0, Math.min(1, crop.y)),
-                    size,
-                }
-                : { x: 0.27, y: 0.12, size: 0.46 },
+            faceCrop: normalizeFaceCrop(crop),
             anchors: Array.isArray(rawRef.anchors)
                 ? rawRef.anchors.flatMap((anchor, index) => {
                     if (!anchor || typeof anchor !== "object") return [];
@@ -817,18 +811,11 @@ function normalizeImageGenerationSettings(settings: Partial<ImageGenerationSetti
     for (const [identityId, rawRef] of Object.entries(rawUserRefs)) {
         if (!rawRef || typeof rawRef !== "object") continue;
         const crop = rawRef.faceCrop;
-        const size = crop && typeof crop.size === "number" ? Math.max(0.18, Math.min(1, crop.size)) : 0.46;
         userReferences[identityId] = {
             assetId: typeof rawRef.assetId === "string" && rawRef.assetId ? rawRef.assetId : undefined,
             updatedAt: typeof rawRef.updatedAt === "number" ? rawRef.updatedAt : Date.now(),
             enabled: rawRef.enabled !== false,
-            faceCrop: crop && typeof crop.x === "number" && typeof crop.y === "number"
-                ? {
-                    x: Math.max(0, Math.min(1, crop.x)),
-                    y: Math.max(0, Math.min(1, crop.y)),
-                    size,
-                }
-                : { x: 0.27, y: 0.12, size: 0.46 },
+            faceCrop: normalizeFaceCrop(crop),
         };
     }
     const provider = settings?.provider === "novelai" ? "novelai" : "openai";

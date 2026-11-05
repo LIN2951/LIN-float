@@ -11,6 +11,7 @@ import {
     saveImageGenerationSettings,
 } from "@/lib/settings-storage";
 import type { UserIdentity } from "@/components/settings/user-identity";
+import { resolveFaceCrop, normalizeFaceCrop, type FaceCrop } from "@/lib/face-crop";
 import { loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
 import { getChatImageFromIndexedDB, saveChatImageToIndexedDB } from "@/lib/chat-asset-storage";
@@ -76,9 +77,10 @@ export function ImageGenerationSettings() {
     const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
     const [cropCharacterId, setCropCharacterId] = useState<string | null>(null);
     const [cropUserIdentityId, setCropUserIdentityId] = useState<string | null>(null);
-    const [cropDraft, setCropDraft] = useState({ x: 0.27, y: 0.12, size: 0.46 });
+    const [cropDraft, setCropDraft] = useState<FaceCrop>({ x: 0.27, y: 0.12, size: 0.46 });
     const [cropViewport, setCropViewport] = useState({ width: 0, height: 0 });
     const cropContainerRef = useRef<HTMLDivElement | null>(null);
+    const cropRectangle = resolveFaceCrop(cropDraft, cropViewport.width || 1, cropViewport.height || 1);
     const cropDragRef = useRef<{ pointerId: number; startX: number; startY: number; cropX: number; cropY: number } | null>(null);
     const characterListRef = useRef<HTMLDivElement | null>(null);
     const characterScrollDragRef = useRef<{
@@ -543,9 +545,17 @@ export function ImageGenerationSettings() {
     };
 
     const updateCropViewport = () => {
-        const rect = cropContainerRef.current?.getBoundingClientRect();
-        if (rect) setCropViewport({ width: rect.width, height: rect.height });
+        const element = cropContainerRef.current;
+        if (element) setCropViewport({ width: element.clientWidth, height: element.clientHeight });
     };
+
+    useEffect(() => {
+        const element = cropContainerRef.current;
+        if (!element || typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver(updateCropViewport);
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, [cropCharacterId, cropUserIdentityId]);
 
     const handleCropPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
         event.preventDefault();
@@ -554,21 +564,19 @@ export function ImageGenerationSettings() {
             pointerId: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
-            cropX: cropDraft.x,
-            cropY: cropDraft.y,
+            cropX: cropRectangle.x,
+            cropY: cropRectangle.y,
         };
     };
 
     const handleCropPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
         const drag = cropDragRef.current;
         if (!drag || drag.pointerId !== event.pointerId || !cropViewport.width || !cropViewport.height) return;
-        const side = cropDraft.size * Math.min(cropViewport.width, cropViewport.height);
-        const maxX = Math.max(0, 1 - side / cropViewport.width);
-        const maxY = Math.max(0, 1 - side / cropViewport.height);
-        setCropDraft(current => ({
-            ...current,
-            x: Math.max(0, Math.min(maxX, drag.cropX + (event.clientX - drag.startX) / cropViewport.width)),
-            y: Math.max(0, Math.min(maxY, drag.cropY + (event.clientY - drag.startY) / cropViewport.height)),
+        const rect = cropContainerRef.current?.getBoundingClientRect();
+        if (!rect?.width || !rect.height) return;
+        setCropDraft(normalizeFaceCrop({ ...cropRectangle,
+            x: drag.cropX + (event.clientX - drag.startX) / rect.width,
+            y: drag.cropY + (event.clientY - drag.startY) / rect.height,
         }));
     };
 
@@ -1545,7 +1553,7 @@ export function ImageGenerationSettings() {
                     }}
                 >
                     <div className="flex flex-col gap-3">
-                        <p className="menu-desc">拖动方框覆盖{cropUserIdentityId ? "用户" : "角色"}脸部；发送参考图时只会截取这个区域，减少服装和背景干扰。</p>
+                        <p className="menu-desc">拖动选区覆盖{cropUserIdentityId ? "用户" : "角色"}脸部；宽度和高度可分别调整，不锁定比例。发送参考图时只截取该区域。</p>
                         <div ref={cropContainerRef} className="relative mx-auto w-fit max-h-[52vh] max-w-full overflow-hidden rounded-xl bg-black/80">
                             <img
                                 src={cropUserIdentityId ? userReferencePreviews[cropUserIdentityId] : referencePreviews[cropCharacterId!]}
@@ -1560,10 +1568,10 @@ export function ImageGenerationSettings() {
                                     aria-label="拖动脸部选区"
                                     className="absolute cursor-move touch-none border-2 border-white bg-white/10 shadow-[0_0_0_999px_rgba(0,0,0,0.42)]"
                                     style={{
-                                        left: cropDraft.x * cropViewport.width,
-                                        top: cropDraft.y * cropViewport.height,
-                                        width: cropDraft.size * Math.min(cropViewport.width, cropViewport.height),
-                                        height: cropDraft.size * Math.min(cropViewport.width, cropViewport.height),
+                                        left: cropRectangle.x * cropViewport.width,
+                                        top: cropRectangle.y * cropViewport.height,
+                                        width: cropRectangle.width * cropViewport.width,
+                                        height: cropRectangle.height * cropViewport.height,
                                     }}
                                     onPointerDown={handleCropPointerDown}
                                     onPointerMove={handleCropPointerMove}
@@ -1574,17 +1582,20 @@ export function ImageGenerationSettings() {
                                 </button>
                             )}
                         </div>
-                        <label className="flex items-center gap-3 menu-desc">
-                            选区大小
-                            <input
-                                type="range"
-                                min="18"
-                                max="80"
-                                value={Math.round(cropDraft.size * 100)}
-                                onChange={(event) => setCropDraft(current => ({ ...current, size: Number(event.target.value) / 100 }))}
-                                className="flex-1"
-                            />
-                        </label>
+                        {(["width", "height"] as const).map(dimension => (
+                            <label key={dimension} className="flex items-center gap-3 menu-desc">
+                                选区{dimension === "width" ? "宽度" : "高度"}
+                                <input type="range" min="5" max="100" step="1" className="min-w-0 flex-1"
+                                    value={Math.round(cropRectangle[dimension] * 100)}
+                                    onChange={event => setCropDraft(normalizeFaceCrop({ ...cropRectangle, [dimension]: Number(event.target.value) / 100 }))} />
+                                <input type="number" aria-label={dimension === "width" ? "选区宽度百分比" : "选区高度百分比"}
+                                    min="5" max="100" step="1" className="ui-input" style={{ width: 70 }}
+                                    key={`${dimension}-${cropRectangle[dimension]}`}
+                                    defaultValue={Math.round(cropRectangle[dimension] * 100)}
+                                    onBlur={event => { if (event.target.value) setCropDraft(normalizeFaceCrop({ ...cropRectangle, [dimension]: Number(event.target.value) / 100 })); }}
+                                    onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />％
+                            </label>
+                        ))}
                     </div>
                 </ContentDialog>
             )}

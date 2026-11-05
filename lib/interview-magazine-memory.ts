@@ -22,6 +22,8 @@ export type InterviewMagazineProjectionEntry = {
 };
 
 type RecordInterviewMagazineProjectionInput = {
+  recipientCharacterIds?: string[];
+  userRole?: "guest" | "host" | "observer";
   issueId: string;
   issueNumber: number;
   title: string;
@@ -77,6 +79,9 @@ function saveEventsByKey(key: string, events: InterviewMagazineProjectionEntry[]
 export function recordInterviewMagazineProjectionEvent(input: RecordInterviewMagazineProjectionInput): InterviewMagazineProjectionEntry | null {
   const characterIds = [...new Set(input.characterIds.map((id) => cleanText(id, 160)).filter(Boolean))];
   if (!input.issueId || characterIds.length === 0) return null;
+  const recipients = input.recipientCharacterIds === undefined ? characterIds
+    : [...new Set(input.recipientCharacterIds)].filter(id => characterIds.includes(id));
+  if (!recipients.length) return null;
 
   const userName = cleanText(input.userName, 80) || "共同受访者";
   const summary = normalizeUserNameToMacro(cleanText(input.summary, 1800), userName);
@@ -88,7 +93,9 @@ export function recordInterviewMagazineProjectionEvent(input: RecordInterviewMag
   const title = cleanText(input.title, 80) || "未命名刊物";
   const shared = characterIds.length > 1;
   const guests = characterNames.length > 0 ? characterNames.join("、") : "嘉宾";
-  const content = `[访谈 ${formatChatTimestamp(timestamp)}] ${guests}与${USER_NAME_MACRO}完成了一期访谈，本期成刊《${title}》。${summary}`;
+  const participation = input.userRole === "observer" ? `${guests}完成了一期访谈`
+    : input.userRole === "host" ? `${guests}接受了${USER_NAME_MACRO}主持的访谈` : `${guests}与${USER_NAME_MACRO}完成了一期访谈`;
+  const content = `[访谈 ${formatChatTimestamp(timestamp)}] ${participation}，本期成刊《${title}》。${summary}`;
 
   const entry: InterviewMagazineProjectionEntry = {
     id: `interview_issue_${input.issueId}`,
@@ -104,7 +111,7 @@ export function recordInterviewMagazineProjectionEvent(input: RecordInterviewMag
     shared,
   };
 
-  for (const characterId of characterIds) {
+  for (const characterId of recipients) {
     const key = storageKey(characterId);
     const current = loadEventsByKey(key);
     saveEventsByKey(key, [entry, ...current.filter((item) => item.id !== entry.id)]);

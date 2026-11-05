@@ -1,8 +1,15 @@
 import Dexie from "dexie";
 import { formatChatTimestamp } from "./llm-prompt-assembler";
 import { hydrateKvDb, kvGet, kvSet, registerKvMigration } from "./kv-db";
+import type { StoryAppearance, StoryAppearanceMode, StoryChromeAppearance, StoryReadingPanelMode } from "./story-appearance";
+import { stripStateAndInnerForPrompt } from "./prompt-sanitizer";
 
 export type StoryUiPrefs = {
+  appearanceMode?: StoryAppearanceMode;
+  /** 默认自动：有壁纸时移除阅读面板，无壁纸时保留。 */
+  readingPanel?: StoryReadingPanelMode;
+  appearance?: StoryAppearance;
+  chrome?: StoryChromeAppearance;
   hideBubble?: boolean;
   hideAvatar?: boolean;
   hideTimestamp?: boolean;
@@ -389,6 +396,10 @@ export type StoryCharacterSettings = {
   minChars?: number;
   maxChars?: number;
   userPerspective?: "second" | "third" | "username";
+  /** 引导在剧情正文中适量生成角色心理描写；缺省关闭，沿用原预设。 */
+  innerThoughtGenerationEnabled?: boolean;
+  /** 引导在剧情正文中使用 Markdown 加粗突出重点；缺省关闭。 */
+  emphasisGenerationEnabled?: boolean;
   proseStyle?: string;
   proseStylePrompt?: string;
   /** 当前角色启用的文风方案（存于公用方案仓库），仅保存选择。 */
@@ -495,6 +506,7 @@ export type StoryProjectionEntry = {
   id: string;
   timestamp: string;
   content: string;
+  sourceLabel?: string;
 };
 
 class StoryDatabase extends Dexie {
@@ -1078,19 +1090,30 @@ function compactProjectionText(text: string, maxLen = 160): string {
   return plain.length > maxLen ? `${plain.slice(0, maxLen)}...` : plain;
 }
 
+function stripStoryScanExcludedContent(text: string, excludedTags?: string): string {
+  const tags = [...new Set(["think", "thinking", "analysis", ...(excludedTags ?? "story_status,story_theater").split(",")].map(tag => tag.trim()).filter(Boolean))];
+  const names = tags.map(tag => tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  return stripStateAndInnerForPrompt(text)
+    .replace(new RegExp(`<(${names})(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\1\\s*>`, "gi"), "")
+    .replace(new RegExp(`<(${names})(?:\\s[^>]*)?>[\\s\\S]*$`, "gi"), "");
+}
+
 export function loadStoryProjectionEntries(
   characterId: string,
-  options?: { afterTimestamp?: string; userName?: string; charName?: string }
+  options?: { afterTimestamp?: string; userName?: string; charName?: string; includeUnmemorized?: boolean }
 ): StoryProjectionEntry[] {
   const sessions = _sessionsCache.filter((item) => {
     const participants = item.participantIds?.length ? item.participantIds : [item.characterId];
     if (!participants.includes(characterId)) return false;
     if (item.mergedIntoMainAt && (item.branchId || "main") !== "main") return false;
+    if (options?.includeUnmemorized) return true;
     if ((item.branchId || "main") === "main") return true;
     if (item.independentStory) return Boolean(item.includedInMemoryAt);
     return item.inheritRecentMemory === true || Boolean(item.includedInMemoryAt);
   });
   if (!sessions.length) return [];
+  const sessionLabels = new Map(sessions.map(session => [session.id, session.title || session.branchName || ((session.branchId || "main") === "main" ? "主线" : "分线")]));
+  const sessionById = new Map(sessions.map(session => [session.id, session]));
   const messages = sessions.flatMap((session) => loadStoryMessages(session.id))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const projections: StoryProjectionEntry[] = [];
@@ -1100,15 +1123,17 @@ export function loadStoryProjectionEntries(
     if (current.role !== "assistant") continue;
     if (options?.afterTimestamp && current.createdAt <= options.afterTimestamp) continue;
 
-    if (!current.storySummary) continue;
-    const summaryText = compactProjectionText(current.storySummary, 500);
+    if (!current.storySummary && !options?.includeUnmemorized) continue;
+    const sourceText = current.storySummary || current.rawContent;
+    const summaryText = compactProjectionText(options?.includeUnmemorized ? stripStoryScanExcludedContent(sourceText, sessionById.get(current.sessionId)?.contextExcludedTags) : sourceText, options?.includeUnmemorized ? 100000 : 500);
     if (!summaryText) continue;
 
     const ts = formatChatTimestamp(current.createdAt);
     projections.push({
       id: `story_projection_${current.id}`,
       timestamp: current.createdAt,
-      content: `[事件 ${ts}] ${summaryText}`,
+      content: `[事件 ${ts}] ${options?.includeUnmemorized ? `【${sessionLabels.get(current.sessionId) || "剧情"}】` : ""}${summaryText}`,
+      ...(options?.includeUnmemorized ? { sourceLabel: sessionLabels.get(current.sessionId) } : {}),
     });
   }
 

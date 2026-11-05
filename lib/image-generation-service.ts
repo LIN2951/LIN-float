@@ -6,6 +6,9 @@ import JSZip from "jszip";
 import { getChatImageFromIndexedDB } from "./chat-asset-storage";
 import { storeMediaBlob } from "./media-cache-storage";
 import { throwIfAborted } from "./abort-utils";
+import { kvGet, kvSet, registerKvMigration } from "./kv-db";
+import { sha256TextHex } from "./sha256-stream";
+import { faceCropPixels, type FaceCrop } from "./face-crop";
 import { descriptionNeedsUserReference } from "./image-reference-selection";
 import {
   NOVELAI_COMMON_MODELS,
@@ -36,6 +39,60 @@ type ImageGenerationApiResponse = {
   mimeType?: string;
   revisedPrompt?: string;
 };
+
+const PENDING_IMAGE_RESULTS_KEY = "ai_phone_pending_image_results_v1";
+registerKvMigration(PENDING_IMAGE_RESULTS_KEY);
+type PendingImageResult = { url: string; revisedPrompt?: string };
+const pendingImageResults = new Map<string, PendingImageResult>();
+
+async function imageResultKey(params: { settings: ImageGenerationSettings; prompt: string; referenceImageDataUrl: string | null }): Promise<string> {
+  // Only the digest is persisted; credentials and reference pictures are never stored here.
+  const { settings, prompt, referenceImageDataUrl } = params;
+  const input = JSON.stringify([settings.baseUrl, settings.apiKey, settings.model, settings.size, settings.quality, prompt, referenceImageDataUrl]);
+  if (!globalThis.crypto?.subtle) return sha256TextHex(input);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function pendingResult(key: string): PendingImageResult | undefined {
+  if (pendingImageResults.has(key)) return pendingImageResults.get(key);
+  try {
+    const saved = JSON.parse(kvGet(PENDING_IMAGE_RESULTS_KEY) || "{}") as Record<string, PendingImageResult>;
+    return saved[key];
+  } catch { return undefined; }
+}
+
+function savePendingResult(key: string, result?: PendingImageResult): void {
+  if (result) pendingImageResults.set(key, result);
+  else pendingImageResults.delete(key);
+  try {
+    const saved = JSON.parse(kvGet(PENDING_IMAGE_RESULTS_KEY) || "{}") as Record<string, PendingImageResult>;
+    if (result) saved[key] = result;
+    else delete saved[key];
+    kvSet(PENDING_IMAGE_RESULTS_KEY, JSON.stringify(saved));
+  } catch { /* Keep the in-memory copy if local persistence is unavailable. */ }
+}
+
+async function recoverImageResult(key: string, result: PendingImageResult, signal?: AbortSignal): Promise<ImageGenerationApiResponse> {
+  savePendingResult(key, result);
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  signal?.addEventListener("abort", onAbort, { once: true });
+  const timer = setTimeout(onAbort, 60_000);
+  try {
+    throwIfAborted(signal);
+    const downloaded = await fetchImageUrlAsBase64(result.url, controller.signal);
+    savePendingResult(key);
+    return { ...downloaded, revisedPrompt: result.revisedPrompt };
+  } catch (error) {
+    throwIfAborted(signal);
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`图片已生成，但下载失败：${detail}。保持相同配置和提示词重试将只下载原图，不会重新生图；若地址已过期，请先到 API 后台保存原图。`);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
 
 const IMAGE_MODEL_HINTS = [
   "image",
@@ -99,7 +156,7 @@ function loadDataUrlImage(dataUrl: string): Promise<HTMLImageElement> {
 
 async function normalizeReferenceImageForEdit(
   dataUrl: string,
-  crop?: { x: number; y: number; size: number },
+  crop?: FaceCrop,
 ): Promise<string> {
   if (!crop && dataUrlMimeType(dataUrl) === "image/png") return dataUrl;
   if (typeof document === "undefined") return dataUrl;
@@ -111,20 +168,13 @@ async function normalizeReferenceImageForEdit(
     if (!width || !height) return dataUrl;
 
     const canvas = document.createElement("canvas");
-    const normalizedSize = crop ? Math.max(0.18, Math.min(1, crop.size)) : 1;
-    const sourceSize = Math.max(1, Math.round(Math.min(width, height) * normalizedSize));
-    const sourceX = crop
-      ? Math.round(Math.max(0, Math.min(width - sourceSize, crop.x * width)))
-      : 0;
-    const sourceY = crop
-      ? Math.round(Math.max(0, Math.min(height - sourceSize, crop.y * height)))
-      : 0;
-    canvas.width = crop ? sourceSize : width;
-    canvas.height = crop ? sourceSize : height;
+    const region = crop ? faceCropPixels(crop, width, height) : { x: 0, y: 0, width, height };
+    canvas.width = region.width;
+    canvas.height = region.height;
     const context = canvas.getContext("2d");
     if (!context) return dataUrl;
     if (crop) {
-      context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, sourceSize, sourceSize);
+      context.drawImage(image, region.x, region.y, region.width, region.height, 0, 0, region.width, region.height);
     } else {
       context.drawImage(image, 0, 0, width, height);
     }
@@ -301,7 +351,18 @@ function extractModels(data: unknown): string[] {
 
 async function fetchImageUrlAsBase64(url: string, signal?: AbortSignal): Promise<{ b64: string; mimeType: string }> {
   throwIfAborted(signal);
-  const res = await fetch(url, { signal });
+  let res: Response;
+  try {
+    res = await fetch(url, { signal });
+    if (!res.ok) throw new Error(`图片下载 HTTP ${res.status}`);
+  } catch {
+    throwIfAborted(signal);
+    // Download only: this endpoint never calls a generation API or receives its key.
+    res = await fetch("/api/image-generation/download", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }), signal,
+    });
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`图片 URL 下载失败 ${res.status}: ${text.slice(0, 160)}`);
@@ -312,7 +373,7 @@ async function fetchImageUrlAsBase64(url: string, signal?: AbortSignal): Promise
   return { b64: cleaned.b64, mimeType: cleaned.mimeType || blob.type || "image/png" };
 }
 
-async function parseImageGenerationResponse(res: Response, signal?: AbortSignal): Promise<ImageGenerationApiResponse> {
+async function parseImageGenerationResponse(res: Response, signal?: AbortSignal, resultKey?: string): Promise<ImageGenerationApiResponse> {
   throwIfAborted(signal);
   const contentType = (res.headers.get("content-type") || "").toLowerCase();
   if (!res.ok) {
@@ -336,6 +397,7 @@ async function parseImageGenerationResponse(res: Response, signal?: AbortSignal)
   }
 
   if (extracted.kind === "url") {
+    if (resultKey) return recoverImageResult(resultKey, extracted, signal);
     const downloaded = await fetchImageUrlAsBase64(extracted.url, signal);
     return { ...downloaded, revisedPrompt: extracted.revisedPrompt };
   }
@@ -406,6 +468,9 @@ async function generateImageDirect(params: {
 }): Promise<ImageGenerationApiResponse> {
   const { settings, prompt, referenceImageDataUrl, signal, proxyBaseUrl } = params;
   throwIfAborted(signal);
+  const resultKey = await imageResultKey(params);
+  const pending = pendingResult(resultKey);
+  if (pending) return recoverImageResult(resultKey, pending, signal);
   const hasReference = Boolean(referenceImageDataUrl);
   const url = buildImageUrl(proxyBaseUrl || settings.baseUrl, hasReference ? "edits" : "generations");
   const headers: Record<string, string> = { Authorization: `Bearer ${settings.apiKey}` };
@@ -439,13 +504,16 @@ async function generateImageDirect(params: {
   if (signal) signal.addEventListener("abort", onOuterAbort, { once: true });
   const totalTimer = setTimeout(() => controller.abort(), 360_000);
   try {
-    return await parseImageGenerationResponse(await fetch(url, { method: "POST", headers, body, signal: controller.signal }), signal);
+    const res = await fetch(url, { method: "POST", headers, body, signal: controller.signal });
+    return await parseImageGenerationResponse(res, controller.signal, resultKey);
   } catch (error) {
     if (controller.signal.aborted && !signal?.aborted) {
       throw new Error(proxyBaseUrl ? "生图代理超时（360 秒未返回）" : "生图请求超时（360 秒未返回）");
     }
     if (error instanceof TypeError) {
-      throw new Error(proxyBaseUrl ? "生图代理连接失败" : "浏览器直连失败：该 API 可能未允许跨域请求。");
+      throw new Error(proxyBaseUrl
+        ? "生图代理连接或响应读取失败；上游可能已经生成图片，请先检查 API 后台，避免重复计费。"
+        : "生图请求连接或响应读取失败，可能受到跨域或网络限制；上游可能已经生成图片，请先检查 API 后台，避免重复计费。");
     }
     throw error;
   } finally {
@@ -457,12 +525,7 @@ async function generateImageDirect(params: {
 // 「代理中转」模式:配置了通用代理(CF Worker)就只走它——用户选择什么模式就走什么链路,
 // 不做隐藏回落(不再兜底到 Netlify 函数,那会消耗站点额度且有 60s 上限)。
 // 常量未配置时保留旧的 Netlify 心跳流式路由(自部署无 Worker 的场景)。
-//
-// Netlify 心跳路由是站点额度的最大计算开销之一(每张图占用函数 30~120s),而不少
-// 选了「服务端转发」的用户,其生图 API 其实允许跨域。因此走 Netlify 前先试一次
-// 浏览器直连:直连因 CORS 失败(预检被拒,真实请求未发出,上游不会计费)才回落
-// 到服务端,并按 baseUrl 记住失败结果,本次会话内不再重复探测。
-const directCorsFailedBaseUrls = new Set<string>();
+// 生成 POST 无法判断是否已经计费，因此禁止跨链路自动重发。
 
 async function generateImageViaServerOrProxy(params: {
   settings: ImageGenerationSettings;
@@ -471,28 +534,7 @@ async function generateImageViaServerOrProxy(params: {
   signal?: AbortSignal;
 }): Promise<ImageGenerationApiResponse> {
   if (IMAGE_GEN_PROXY_URL) {
-    try {
-      return await generateImageDirect({ ...params, proxyBaseUrl: IMAGE_GEN_PROXY_URL });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes("生图代理连接失败")) {
-        throw new Error("生图代理连接失败:当前网络可能无法访问代理服务器(部分地区需开启代理),或稍后重试。");
-      }
-      throw error;
-    }
-  }
-  const baseUrlKey = normalizeBaseUrl(params.settings.baseUrl);
-  if (!directCorsFailedBaseUrls.has(baseUrlKey)) {
-    try {
-      return await generateImageDirect(params);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      // 只有连接层失败(CORS/断网)才回落;API 自身的错误(密钥无效、余额不足等)
-      // 说明直连是通的,换服务端转发也会得到同样错误,直接抛出避免重复计费。
-      if (!message.includes("浏览器直连失败")) throw error;
-      throwIfAborted(params.signal);
-      directCorsFailedBaseUrls.add(baseUrlKey);
-    }
+    return generateImageDirect({ ...params, proxyBaseUrl: IMAGE_GEN_PROXY_URL });
   }
   return generateImageViaServer(params);
 }
@@ -505,6 +547,9 @@ async function generateImageViaServer(params: {
 }): Promise<ImageGenerationApiResponse> {
   const { settings, prompt, referenceImageDataUrl, signal } = params;
   throwIfAborted(signal);
+  const resultKey = await imageResultKey(params);
+  const pending = pendingResult(resultKey);
+  if (pending) return recoverImageResult(resultKey, pending, signal);
   // 防"无限卡住":函数被平台中途击杀时流可能既不关闭也不报错。
   // 总超时 180s + 断流检测(心跳每 3s 一个字节,超过 25s 没有任何字节视为断流)。
   const controller = new AbortController();
@@ -530,7 +575,7 @@ async function generateImageViaServer(params: {
     });
     throwIfAborted(signal);
 
-    type ServerImagePayload = { httpStatus?: number; b64?: string; mimeType?: string; revisedPrompt?: string; error?: string };
+    type ServerImagePayload = { httpStatus?: number; b64?: string; mimeType?: string; revisedPrompt?: string; error?: string; imageUrl?: string; generationCompleted?: boolean };
     const contentType = (res.headers.get("content-type") || "").toLowerCase();
     let data: ServerImagePayload;
     if (contentType.includes("text/plain")) {
@@ -567,6 +612,7 @@ async function generateImageViaServer(params: {
         throw new Error("生图请求失败（流式结果解析出错）");
       }
       throwIfAborted(signal);
+      if (data.generationCompleted && data.imageUrl) return await recoverImageResult(resultKey, { url: data.imageUrl, revisedPrompt: data.revisedPrompt }, controller.signal);
       if (data.error || !data.b64) {
         throw new Error(data.error || `生图请求失败 ${data.httpStatus ?? res.status}`);
       }
@@ -574,6 +620,7 @@ async function generateImageViaServer(params: {
       // 非流式回退(旧服务端等)
       data = await res.json().catch(() => ({})) as ServerImagePayload;
       throwIfAborted(signal);
+      if (data.generationCompleted && data.imageUrl) return await recoverImageResult(resultKey, { url: data.imageUrl, revisedPrompt: data.revisedPrompt }, controller.signal);
       if (!res.ok || data.error || !data.b64) {
         throw new Error(data.error || `生图请求失败 ${res.status}`);
       }

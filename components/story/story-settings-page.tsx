@@ -70,6 +70,8 @@ function normalizeSettings(value: StoryCharacterSettings, repo: StorySchemeRepos
     minChars: value.minChars ?? 800,
     maxChars: value.maxChars ?? 1500,
     userPerspective: value.userPerspective || "second",
+    innerThoughtGenerationEnabled: value.innerThoughtGenerationEnabled === true,
+    emphasisGenerationEnabled: value.emphasisGenerationEnabled === true,
     // 启用选择超出仓库范围时回落：旧 id → 按旧文风名匹配 → 首个方案
     activeProseStyleSchemeId: repo.proseStyleSchemes.some((item) => item.id === value.activeProseStyleSchemeId)
       ? value.activeProseStyleSchemeId
@@ -671,6 +673,9 @@ export function StorySettingsPage(props: StorySettingsPageProps) {
             <label className="story-generation-control"><span>正文文风</span><select value={normalized.activeProseStyleSchemeId} onChange={(event) => patchSettings({ activeProseStyleSchemeId: event.target.value })}>{repo.proseStyleSchemes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             <div className="story-generation-control story-generation-length"><span>正文字数</span><div><CharLimitInput label="最少" value={normalized.minChars ?? 800} onCommit={(minChars) => patchSettings({ minChars })} /><CharLimitInput label="最多" value={normalized.maxChars ?? 1500} onCommit={(maxChars) => patchSettings({ maxChars })} /></div></div>
           </div>
+          <ToggleRow title="引导生成角色心声" detail="结合人设和情境，适量用 *心声内容* 描写角色未说出口的想法" checked={Boolean(normalized.innerThoughtGenerationEnabled)} onChange={(value) => patchSettings({ innerThoughtGenerationEnabled: value })} />
+          <ToggleRow title="引导使用重点强调" detail="适量用 **重点内容** 加粗重要的情绪、动作或句子" checked={Boolean(normalized.emphasisGenerationEnabled)} onChange={(value) => patchSettings({ emphasisGenerationEnabled: value })} />
+          <p className="story-settings-note">两个开关独立生效，关闭时沿用原预设。</p>
           <div className="story-auto-requirements-preview"><strong>每轮自动注入</strong><span>人称 · 文风 · 字数将作为最高优先级要求写入每次剧情调用，无需重复填写到额外要求。</span></div>
           <ProseStyleEditor showSelector={false} schemes={repo.proseStyleSchemes} activeId={normalized.activeProseStyleSchemeId!} onChange={(proseStyleSchemes, activeProseStyleSchemeId) => { patchRepo({ proseStyleSchemes }); patchSettings({ activeProseStyleSchemeId }); }} />
         </SettingCard>

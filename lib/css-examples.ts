@@ -1164,334 +1164,326 @@ export const CHAT_APP_CSS_EXAMPLE = `/* ═══ 聊天应用 CSS 示例 ══
 /* .chat-app { font-family: "ZCOOL KuaiLe", sans-serif; } */
 `;
 
-export const STORY_CSS_EXAMPLE = `/* ═══ 剧情模式样式示例 ═══ */
-/* 此 CSS 仅作用于当前剧情会话 */
+export const STORY_CSS_EXAMPLE = `/* 剧情美化 · 白色基础模板
+只作用于当前剧情。修改数值即可；可选功能取消对应整段注释。
+贴图地址替换为自己的完整图片 URL，不会自动请求示例图片。
+高级 CSS 优先于基础美化：不想覆盖某项，删除对应规则即可。
+不想使用任何基础拉杆或两栏参数，请将美化方式切为「仅使用高级 CSS」。
+当前参数、CSS 和美化方式可在预览下方一起保存为命名预设。
+这里的 :root 会自动指向当前剧情，不要改成 .story-app-shell。
+*/
 
-/* ══ 颜色变量 ══ */
+/* 01 白色底板与主题颜色 */
 :root {
-  /* ── 页面背景 ── */
-  --c-story-bg-top: #fafafa;         /* 顶部渐变色 */
-  --c-story-bg-mid: #f5f5f5;         /* 中间渐变色 */
-  --c-story-bg-bottom: #f0f0f0;      /* 底部渐变色 */
-  --c-story-text: #3a3b3c;           /* 正文颜色 */
-  --c-story-text-light: #64748b;     /* 次要文字 */
-  --c-story-heading: #1e293b;        /* 标题颜色 */
-  --c-story-sub: #94a3b8;            /* 辅助文字 */
-
-  /* ── 气泡 ── */
-  --c-story-bubble-bg: rgba(255,255,255,0.8);   /* AI气泡背景 */
-  --c-story-bubble-border: rgba(0,0,0,0.06);    /* AI气泡边框 */
-  --c-story-bubble-user: rgba(0,0,0,0.04);      /* 用户气泡背景 */
-  --c-story-text-user: #1e293b;                  /* 用户气泡文字 */
-
-  /* ── 装饰 ── */
-  --c-story-ornament: rgba(148,163,184,0.15);    /* 装饰元素 */
-  --c-story-ornament-soft: rgba(148,163,184,0.08);
-  --c-story-accent: #64748b;                     /* 强调色 */
-  --c-story-accent-light: #e2e8f0;               /* 浅强调色 */
-
-  /* ── 输入区 ── */
-  --c-story-input-bar: rgba(255,255,255,0.9);    /* 输入栏背景 */
-  --c-story-input-bar-focus: rgba(255,255,255,0.95);
-  --c-story-input-border: rgba(0,0,0,0.08);      /* 输入栏外框边缘 */
-  --c-story-input-inner: rgba(248,250,252,0.78); /* 内层文字输入框 */
-  --c-story-input-inner-focus: rgba(248,250,252,0.94);
-  --c-story-send-bg-active: #0f172a;              /* 发送按钮激活 */
-  --c-story-send-color: #64748b;                  /* 发送按钮颜色 */
-
-  /* ── 按钮/面板 ── */
-  --c-story-btn-bg: rgba(255,255,255,0.5);       /* 按钮背景 */
-  --c-story-btn-border: rgba(0,0,0,0.08);        /* 按钮边框 */
-  --c-story-panel: rgba(248,250,252,0.95);        /* 面板背景 */
-  --c-story-panel-active: rgba(241,245,249,0.8);
-  --c-story-panel-border: rgba(0,0,0,0.06);
-
-  /* ── 抽屉/侧栏 ── */
-  --c-story-drawer-top: #f8fafc;                  /* 抽屉顶部 */
-  --c-story-drawer-bottom: #f1f5f9;               /* 抽屉底部 */
-  --c-story-drawer-border: rgba(0,0,0,0.06);
-
-  /* ── 代码块 ── */
-  --c-story-code-bg: rgba(248,250,252,0.8);
+  --c-story-bg-top: #ffffff;
+  --c-story-bg-mid: #ffffff;
+  --c-story-bg-bottom: #ffffff;
+  --c-story-text: #334155;
+  --c-story-text-user: #334155;
+  --c-story-text-light: #64748b;
+  --c-story-heading: #334155;
+  --c-story-sub: #94a3b8;
+  --c-story-bubble-bg: #ffffff;
+  --c-story-bubble-user: #ffffff;
+  --c-story-bubble-border: #eeeeee;
+  --c-story-ornament: transparent;
+  --c-story-ornament-soft: transparent;
+  --c-story-accent: #64748b;
+  --c-story-accent-light: #eeeeee;
+  --c-story-input-bar: #ffffff;
+  --c-story-input-bar-focus: #ffffff;
+  --c-story-input-border: #eeeeee;
+  --c-story-input-inner: #f8fafc;
+  --c-story-input-inner-focus: #f8fafc;
+  --c-story-send-bg-active: #334155;
+  --c-story-send-color: #64748b;
+  --c-story-btn-bg: #ffffff;
+  --c-story-btn-border: #eeeeee;
+  --c-story-panel: #ffffff;
+  --c-story-panel-active: #f8fafc;
+  --c-story-panel-border: #eeeeee;
+  --c-story-drawer-top: #ffffff;
+  --c-story-drawer-bottom: #ffffff;
+  --c-story-drawer-border: #eeeeee;
+  --c-story-code-bg: #f8fafc;
   --c-story-code-color: #334155;
-
-  /* ── 其他 ── */
-  --c-story-fold-bg: rgba(248,250,252,0.6);       /* 折叠块背景 */
-  --c-story-meta-bg: rgba(255,255,255,0.8);       /* 元数据卡片背景 */
-  --c-story-meta-border: rgba(0,0,0,0.06);
-  --c-story-cover-bg: #f1f5f9;                    /* 封面背景 */
-  --c-story-cover-border: #fff;                   /* 封面边框 */
-  --c-story-placeholder: #94a3b8;                 /* 占位符颜色 */
-  --c-story-quote: #475569;                       /* 引用颜色 */
-  --c-story-quote-bg: rgba(248,250,252,0.5);      /* 引用背景 */
-  --c-story-table-header-bg: rgba(248,250,252,0.8); /* 表头背景 */
-  --c-story-bold-highlight: rgba(148,163,184,0.2);  /* 加粗下划高亮 */
-  --c-story-overlay: rgba(0,0,0,0.2);             /* 遮罩层 */
-  --c-story-css-box-bg: rgba(248,250,252,0.6);    /* CSS编辑框背景 */
-  --story-font: serif;                            /* 剧情字体 */
+  --c-story-fold-bg: #f8fafc;
+  --c-story-meta-bg: #ffffff;
+  --c-story-meta-border: #eeeeee;
+  --c-story-cover-bg: #f8fafc;
+  --c-story-cover-border: #ffffff;
+  --c-story-placeholder: #94a3b8;
+  --c-story-quote: #64748b;
+  --c-story-quote-bg: #f8fafc;
+  --c-story-table-header-bg: #f8fafc;
+  --c-story-bold-highlight: #f1f5f9;
+  --c-story-overlay: rgba(0,0,0,0.2);
+  --c-story-css-box-bg: #f8fafc;
 }
 
-/* ══ 页面整体 ══ */
-.story-app-shell {
-  /* background: linear-gradient(160deg, var(--c-story-bg-top), var(--c-story-bg-mid), var(--c-story-bg-bottom)); */
-  /* color: var(--c-story-text); */
+/* 02 壁纸、阅读面板与消息间距（按需启用）
+保留原来的阅读面板开关；不启用下面的规则时，沿用界面设置。
+.story-wallpaper-layer {
+  background-image: url("你的壁纸图片地址");
+  background-size: cover;
+  background-position: center;
 }
-.story-app-shell::before,
-.story-app-shell::after {
-  /* 装饰光晕 */
-  /* background: radial-gradient(circle, rgba(139,92,246,0.15) 0%, transparent 70%); */
-}
+.story-wallpaper-layer::after { background: transparent; backdrop-filter: none; }
+.story-stage-inner { background: transparent; box-shadow: none; border: none; gap: 24px; }
+.story-row { gap: 10px; }
+*/
 
-/* ══ 顶部标题栏 ══ */
-/* .story-header = 整个标题栏（含安全区），改背景用这个 */
-/* .story-header-content = 按钮+标题那一行，改 padding/布局用这个 */
-.story-header {
-  /* background: linear-gradient(180deg, var(--c-story-bg-top) 60%, transparent); */
+/* 03 用户与角色气泡（两边分开改，作用于普通正文；HTML 卡片保留自身样式）
+以下变量用于组合模式中“去掉阅读面板”的布局。放在消息行上可覆盖基础美化的变量。
+bubbleAlign：flex-start 靠左、center 居中、flex-end 靠右，与头像位置独立。
+avatarGap 为头像昵称时间整组与气泡的间距；timeDisplay 为 inline 显示、none 隐藏时间。
+textAlign 取 justify 或 center，textIndent 取 0 或 2em，对应四种段落排版。
+.story-stage-inner > .story-row[data-role="assistant"] {
+  --story-assistant-background: #ffffff;
+  --story-assistant-padding: 12px;
+  --story-assistant-radius: 12px;
+  --story-assistant-maxWidth: 100%;
+  --story-assistant-bubbleAlign: center;
+  --story-assistant-fontSize: 14px;
+  --story-assistant-textColor: #334155;
+  --story-assistant-dialogueColor: #64748b;
+  --story-assistant-boldColor: #1e293b;
+  --story-assistant-italicColor: #64748b;
+  --story-assistant-lineHeight: 1.8;
+  --story-assistant-paragraphGap: 12px;
+  --story-assistant-avatarGap: 10px;
+  --story-assistant-timeDisplay: inline;
+  --story-assistant-textAlign: justify;
+  --story-assistant-textIndent: 0;
 }
-.story-header-content {
-  /* padding: 0 20px 14px; */
+.story-stage-inner > .story-row[data-role="user"] {
+  --story-user-background: #ffffff;
+  --story-user-padding: 12px;
+  --story-user-radius: 12px;
+  --story-user-maxWidth: 100%;
+  --story-user-bubbleAlign: center;
+  --story-user-fontSize: 14px;
+  --story-user-textColor: #334155;
+  --story-user-dialogueColor: #64748b;
+  --story-user-boldColor: #1e293b;
+  --story-user-italicColor: #64748b;
+  --story-user-lineHeight: 1.8;
+  --story-user-paragraphGap: 12px;
+  --story-user-avatarGap: 10px;
+  --story-user-timeDisplay: inline;
+  --story-user-textAlign: justify;
+  --story-user-textIndent: 0;
 }
-.story-header-center {
-  /* color: var(--c-story-sub); */
-  /* font-size: calc(12px*var(--app-text-scale,1)); */
-}
-.story-top-btn {
-  /* border: 1px solid var(--c-story-btn-border); */
-  /* background: var(--c-story-btn-bg); */
-  /* color: var(--c-story-text); */
-  /* border-radius: 10px; */
-}
+.story-row[data-role="assistant"] .story-bubble { border: 1px solid #eeeeee; box-shadow: none; }
+.story-row[data-role="user"] .story-bubble { border: 1px solid #eeeeee; box-shadow: none; }
+*/
 
-/* ══ 可选：悬浮透明标题栏模板 ══ */
-/* 使用时取消下面整段注释。不要覆盖 .story-app-shell 的 position。 */
-/*
-:root {
-  --story-floating-header-height: 102px;
+/* 仅使用高级 CSS 时，直接设置样式即可；下面示例也适用于组合模式。
+.story-row[data-role="assistant"] .story-bubble {
+  background: #ffffff; color: #334155; padding: 12px; border-radius: 12px;
+  width: 100%; max-width: 100%; box-sizing: border-box; font-size: 14px; line-height: 1.8;
 }
-
-.story-header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  width: auto;
-  min-height: var(--story-floating-header-height);
-  padding: 52px 20px 14px;
-  box-sizing: border-box;
-  z-index: 100;
-
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-
-  background: rgba(255,255,255,0.45);
-  -webkit-backdrop-filter: blur(16px) saturate(120%);
-  backdrop-filter: blur(16px) saturate(120%);
-  border-bottom: 1px solid rgba(255,255,255,0.35);
+.story-row[data-role="user"] .story-bubble {
+  background: #ffffff; color: #334155; padding: 12px; border-radius: 12px;
+  width: 100%; max-width: 100%; box-sizing: border-box; font-size: 14px; line-height: 1.8;
 }
+.story-row .story-richtext { font-size: inherit; line-height: inherit; color: inherit; }
+.story-row .story-bubble-wrap { align-items: center; }
+.story-row .story-richtext p { text-align: justify; text-indent: 0; margin-block: 12px; }
+.story-row .story-richtext .story-dialogue { color: #64748b; }
+.story-row .story-richtext em { color: #64748b; }
+.story-row .story-richtext strong { color: #1e293b; }
+*/
 
-.story-header-left {
-  justify-content: flex-start;
+/* 04 头像大小、形状、隐藏与位移
+消息头像尺寸可直接覆盖，无需额外提高优先级。
+.story-stage-inner .story-row[data-role="assistant"] .story-avatar-wrap { width: 42px; flex: 0 0 42px; }
+.story-stage-inner .story-row[data-role="assistant"] .story-avatar-wrap .ui-avatar { width: 42px; height: 42px; border-radius: 50%; }
+.story-stage-inner .story-row[data-role="user"] .story-avatar-wrap { width: 42px; flex: 0 0 42px; }
+.story-stage-inner .story-row[data-role="user"] .story-avatar-wrap .ui-avatar { width: 42px; height: 42px; border-radius: 50%; }
+.story-row .story-avatar-wrap { display: none; }
+.story-avatar-wrap { transform: translate(0px, 0px); }
+*/
+
+/* 05 头像与昵称时间的位置（三种方案择一，也可直接用基础美化的选项）
+默认：角色左、用户右，昵称时间在头像旁。
+.story-stage-inner > .story-row[data-role="assistant"] > .story-msg-head { flex-direction: row; align-items: center; max-width: none; }
+.story-stage-inner > .story-row[data-role="user"] > .story-msg-head { flex-direction: row-reverse; align-items: center; max-width: none; }
+*/
+/* 居中：头像在气泡上方，昵称时间在头像下面。
+.story-stage-inner > .story-row[data-role] > .story-msg-head { flex-direction: column; align-items: center; width: 100%; max-width: var(--story-current-maxWidth,100%); gap: 6px; }
+.story-stage-inner > .story-row[data-role="assistant"] > .story-msg-head { align-self: var(--story-assistant-bubbleAlign,center); }
+.story-stage-inner > .story-row[data-role="user"] > .story-msg-head { align-self: var(--story-user-bubbleAlign,center); }
+.story-stage-inner > .story-row[data-role] .story-msg-meta { align-items: center; text-align: center; }
+*/
+/* 左右对调：角色右、用户左。
+.story-stage-inner > .story-row[data-role="assistant"] > .story-msg-head { flex-direction: row-reverse; max-width: none; }
+.story-stage-inner > .story-row[data-role="user"] > .story-msg-head { flex-direction: row; max-width: none; }
+.story-stage-inner > .story-row[data-role="assistant"] .story-msg-meta { align-items: flex-end; }
+.story-stage-inner > .story-row[data-role="user"] .story-msg-meta { align-items: flex-start; }
+*/
+
+/* 06 昵称和时间：显示/隐藏、位置、大小与自定义字符
+CSS 添加的字符仅作装饰，不写入消息或发送给模型。
+.story-msg-name { display: none; }
+[data-story-timestamp] { display: none !important; }
+.story-msg-meta { transform: translate(0px, 0px); gap: 4px; }
+.story-msg-name { font-size: 12px; color: #334155; order: 0; }
+[data-story-timestamp] { font-size: 10px; color: #94a3b8; order: 1; }
+.story-msg-name::before { content: "✦ "; }
+.story-msg-name::after { content: " · 小记"; }
+[data-story-timestamp]::before { content: "时间："; }
+.story-row[data-role="assistant"] .story-bubble::before { content: "✦ 故事"; display: block; margin-bottom: 8px; font-size: 10px; color: #94a3b8; }
+*/
+/* 把昵称时间放到正文气泡下方（元信息仍跟随头像所在的头部）
+.story-stage-inner > .story-row[data-role] > .story-msg-head { order: 2; }
+.story-stage-inner > .story-row[data-role] > .story-bubble-wrap { order: 1; }
+*/
+
+/* 07 气泡贴纸：独立设置双方，调整图片、尺寸、偏移和旋转
+不要去掉 pointer-events:none，以免遮挡气泡长按与按钮。
+.story-row[data-role="assistant"] .story-bubble::after {
+  content: ""; position: absolute; width: 40px; height: 40px;
+  right: -6px; top: -20px; background: url("角色贴纸图片地址") center / contain no-repeat;
+  transform: rotate(8deg); pointer-events: none; z-index: 1;
 }
-
-.story-header-right {
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.story-stage {
-  padding-top: calc(var(--story-floating-header-height) + 12px);
-}
-
-.story-row:first-of-type {
-  margin-top: 0;
+.story-row[data-role="user"] .story-bubble::after {
+  content: ""; position: absolute; width: 40px; height: 40px;
+  left: -6px; bottom: -16px; background: url("用户贴纸图片地址") center / contain no-repeat;
+  transform: rotate(-8deg); pointer-events: none; z-index: 1;
 }
 */
 
-/* ══ 消息行 ══ */
-.story-row {
-  /* padding: 4px 16px; */
-}
-.story-row[data-role="assistant"] .story-bubble {
-  /* background: var(--c-story-bubble-bg); */
-  /* border: 1px solid var(--c-story-bubble-border); */
-  /* border-radius: 12px; */
-}
-.story-row[data-role="user"] .story-bubble {
-  /* background: var(--c-story-bubble-user); */
-  /* border-radius: 12px; */
-  /* color: var(--c-story-text-user); */
-}
+/* 08 顶栏、底栏：分别替换图床图片；rgba 最后一个数字控制背景不透明度
+只改背景，不要给整个栏设 opacity，否则头像和按钮也一起变淡。
+.story-header { background: rgba(255,255,255,0.8) url("顶栏背景图片地址") center / cover no-repeat !important; box-shadow: none; border-radius: 0 0 14px 14px; }
+.story-composer { background: rgba(255,255,255,0.8) url("底栏背景图片地址") center / cover no-repeat !important; box-shadow: none; border-radius: 14px 14px 0 0; }
+.story-composer:focus-within { background: rgba(255,255,255,0.8) url("底栏背景图片地址") center / cover no-repeat !important; }
+.story-header-content { padding: 1px 16px; }
+.story-header-person .ui-avatar { display: none; }
+.story-header-person span { display: none; }
+*/
 
-/* ══ 气泡头部 (角色名 + 时间) ══ */
-.story-bubble-head {
-  /* font-size: calc(11px*var(--app-text-scale,1)); */
-  /* color: var(--c-story-sub); */
+/* 09 顶栏与底栏按钮统一配色、背景透明度、圆角、尺寸
+rgba 的最后一个数字仅控制按钮背景；图标和文字保持清晰。
+.story-header button,
+.story-composer button {
+  color: #64748b !important; opacity: 1;
+  background: rgba(255,255,255,0.85) !important; border: 1px solid #eeeeee; border-radius: 10px; box-shadow: none;
 }
+.story-header button:disabled,
+.story-composer button:disabled { opacity: 0.4 !important; }
+.story-header-person,
+.story-header-center { color: #64748b !important; }
+.story-top-btn { width: 32px; height: 32px; }
+.story-send-btn { width: 38px; height: 38px; }
+*/
 
-/* ══ 头像 ══ */
-.story-avatar-wrap {
-  /* width: 36px; height: 36px; */
-  /* border-radius: 50%; */
+/* 10 单个按钮换图标（保留真实按钮、点击功能和无障碍名称）
+可用动作名：back 返回、new 新剧情、beautify 美化、settings 设置、
+voice 语音、continue 续写、quick-input 快捷输入、auto-read 自动阅读、
+current-read 当前位置阅读、send 发送。
+把下面三处 data-story-action 的值一起换掉，就能替换其他按钮。
+下面排除了生成状态：发送按钮生成中保留停止图标，其他按钮也可套用。
+button[data-story-action="send"]:not([data-state="generating"]) { position: relative; font-size: 0; }
+button[data-story-action="send"]:not([data-state="generating"]) > * { visibility: hidden; }
+button[data-story-action="send"]:not([data-state="generating"])::before {
+  content: ""; position: absolute; inset: 6px;
+  background: url("按钮图标图片地址") center / contain no-repeat; pointer-events: none;
 }
+*/
 
-/* ══ 富文本内容 ══ */
-.story-richtext {
-  /* font-family: var(--story-font); */
-  /* font-size: calc(15px*var(--app-text-scale,1)); */
-  /* line-height: 1.8; */
-  /* color: var(--c-story-text); */
-}
-.story-richtext strong {
-  /* color: var(--c-story-heading); */
-  /* background: linear-gradient(transparent 65%, var(--c-story-ornament) 65%); */
-}
-.story-richtext em, .story-richtext i {
-  /* font-family: var(--story-font); */
-  /* color: var(--c-story-text-light); */
-}
-.story-richtext blockquote {
-  /* border-left: 2px solid var(--c-story-accent-light); */
-  /* color: var(--c-story-quote); */
-  /* font-family: var(--story-font); */
-}
-.story-richtext :is(h1,h2,h3,h4) {
-  /* font-family: var(--story-font); */
-  /* color: var(--c-story-heading); */
-}
-.story-richtext h2 {
-  /* text-align: center; */  /* 章节标题居中 */
-}
-.story-richtext hr {
-  /* border-color: var(--c-story-ornament); */
-}
-.story-richtext code {
-  /* background: var(--c-story-code-bg); */
-  /* color: var(--c-story-code-color); */
-}
-.story-richtext pre {
-  /* background: var(--c-story-code-bg); */
-  /* border-radius: 8px; */
-}
-.story-richtext img {
-  /* border-radius: 8px; */
-  /* max-width: 100%; */
-}
-.story-richtext table {
-  /* border-color: var(--c-story-ornament); */
-}
+/* 11 按钮位置：优先改 order 和 gap，避免绝对定位遮挡输入框
+图标名称见上方；每个按钮可单独 transform 微调。
+.story-header-content { grid-template-columns: 1fr auto auto; }
+.story-header-right { gap: 10px !important; }
+.story-header-right button[data-story-action="settings"] { order: -1; }
+.story-composer textarea { order: 1; }
+.story-composer button[data-story-action="send"] { order: 0; }
+button[data-story-action="voice"] { left: 12px; top: -32px; }
+button[data-story-action="continue"] { left: 48px; top: -32px; }
+button[data-story-action="quick-input"] { left: 104px; top: -32px; }
+button[data-story-action="auto-read"] { left: 152px !important; top: -32px; }
+button[data-story-action="current-read"] { left: 200px !important; top: -32px; }
+button[data-story-action="beautify"] { transform: translate(0px, 0px); }
+*/
+/* 可选悬浮透明顶栏：保持手机和剧情外壳的定位不变，顶部留足阅读空间。
+.story-header { background: rgba(255,255,255,0.45) !important; backdrop-filter: blur(12px); }
+.story-stage { padding-top: calc(var(--page-header-safe-top,48px) + 58px); }
+*/
 
-/* ══ 折叠块 (thinking/summary) ══ */
-.story-fold-block {
-  /* background: var(--c-story-fold-bg); */
-  /* border-radius: 8px; */
-}
-.story-summary-fold {
-  /* background: var(--c-story-fold-bg); */
-  /* border-radius: 8px; */
-}
+/* 12 输入框、语音与生成提示
+.story-composer textarea { background: #f8fafc; color: #334155; border-radius: 12px; border: 1px solid #eeeeee; }
+.story-composer:focus-within textarea { background: #f8fafc; }
+.story-composer textarea::placeholder { color: #94a3b8; }
+.story-quick-panel { background: #ffffff; border-radius: 12px; }
+.story-quick-chip { background: #f8fafc; color: #64748b; }
+.story-voice-segment { color: #64748b; }
+.story-voice-play { color: #64748b; }
+.story-generating-bubble { background: #ffffff; }
+.story-generating-copy { color: #64748b; }
+.story-streaming-cursor { background: #64748b; }
+*/
 
-/* ══ 底部输入区：外框 + 内层输入框 + 发送按钮 ══ */
-.story-composer {
-  /* background: var(--c-story-input-bar); */       /* 外层框背景 */
-  /* border-color: var(--c-story-input-border); */  /* 外层框边缘 */
-  /* border-radius: 18px; */
-  /* padding: 6px; */
-  /* box-shadow: 0 3px 8px rgba(0,0,0,0.02); */
-}
-.story-composer textarea {
-  /* background: var(--c-story-input-inner); */      /* 内层文字框背景 */
-  /* color: var(--c-story-text); */
-  /* border-radius: 13px; */
-  /* box-shadow: none; */
-}
-.story-composer:focus-within textarea {
-  /* background: var(--c-story-input-inner-focus); */
-}
-.story-send-btn {
-  /* background: linear-gradient(145deg, color-mix(in srgb, var(--c-story-send-bg-active) 88%, #64748b), var(--c-story-send-bg-active)); */
-  /* color: var(--c-story-send-color); */
-  /* border-radius: 12px; */
-}
+/* 13 正文、对白、加粗、引用、代码、图片、表格与章节
+.story-richtext { font-family: var(--story-font); }
+.story-free-layout .story-bubble .story-richtext > p,
+.story-free-layout .story-bubble .story-richtext > [class^="smsg-"] > p { text-indent: var(--story-current-textIndent,0); text-align: var(--story-current-textAlign,justify); }
+.story-free-layout .story-bubble .story-richtext > [class^="smsg-"] > p .story-br-indent { width: var(--story-current-textIndent,0); }
+.story-richtext em,
+.story-richtext i,
+.story-richtext .story-thought { color: #64748b; }
+.story-richtext strong,
+.story-richtext b { color: #1e293b; }
+.story-richtext .story-dialogue { color: #64748b; }
+.story-richtext blockquote { border-left: 2px solid #eeeeee; background: #f8fafc; color: #64748b; }
+.story-richtext h1,
+.story-richtext h2,
+.story-richtext h3,
+.story-richtext h4 { color: #334155; text-align: center; }
+.story-richtext hr { border-color: #eeeeee; }
+.story-richtext code,
+.story-richtext pre { background: #f8fafc; color: #334155; border-radius: 8px; }
+.story-richtext img { max-width: 100%; border-radius: 8px; }
+.story-richtext table { border-color: #eeeeee; }
+.story-richtext th { background: #f8fafc; }
+*/
 
-/* ══ 侧栏抽屉 (角色选择/设置) ══ */
-.story-drawer {
-  /* background: linear-gradient(var(--c-story-drawer-top), var(--c-story-drawer-bottom)); */
-}
-.story-drawer-overlay {
-  /* background: rgba(0,0,0,0.3); */
-}
-.story-drawer-section {
-  /* border-bottom: 1px solid var(--c-story-drawer-border); */
-}
-.story-drawer-eyebrow {
-  /* color: var(--c-story-sub); */
-  /* font-size: calc(11px*var(--app-text-scale,1)); */
-}
-.story-character-chip {
-  /* border-radius: 10px; */
-  /* background: var(--c-story-panel); */
-}
+/* 14 折叠内容、状态栏、小剧场与封面卡片
+.story-fold-block,
+.story-summary-fold { background: #f8fafc; border-radius: 8px; }
+.story-status-bar { background: #ffffff; border-left-color: #eeeeee; box-shadow: none; }
+.story-status-label { color: #64748b; }
+.story-status-value { color: #334155; }
+.story-theater-card { background: #ffffff; border-color: #eeeeee; box-shadow: none; }
+.story-meta { background: #ffffff; border: 1px solid #eeeeee; border-radius: 12px; }
+.story-meta-title { color: #334155; }
+.story-meta-desc { color: #64748b; }
+.story-meta-cover { background: #f8fafc; border-radius: 12px; }
+.story-meta-tags { gap: 6px; }
+.story-empty { color: #94a3b8; }
+*/
 
-/* ══ 元数据卡片 (封面/简介) ══ */
-.story-meta {
-  /* background: var(--c-story-meta-bg); */
-  /* border: 1px solid var(--c-story-meta-border); */
-  /* border-radius: 16px; */
-}
-.story-meta-title {
-  /* font-family: var(--story-font); */
-  /* color: var(--c-story-heading); */
-}
-.story-meta-desc {
-  /* font-family: var(--story-font); */
-  /* color: var(--c-story-text-light); */
-}
-.story-meta-cover {
-  /* background: var(--c-story-cover-bg); */
-  /* border-radius: 12px; */
-}
-.story-meta-tags {
-  /* gap: 6px; */
-}
+/* 15 侧栏、右键菜单、多选与编辑
+.story-drawer { background: #ffffff; }
+.story-drawer-overlay { background: rgba(0,0,0,0.2); }
+.story-drawer-section { border-color: #eeeeee; }
+.story-drawer-eyebrow { color: #64748b; }
+.story-character-chip { background: #ffffff; border-radius: 10px; }
+.story-ctx-menu { background: #ffffff; border-radius: 10px; }
+.story-ctx-btn { color: #334155; }
+.story-ctx-btn-danger { color: #b91c1c; }
+.story-multi-select-bar { background: #ffffff; }
+.story-inline-edit { background: #ffffff; border-radius: 8px; }
+.story-inline-edit-btn-save { background: #334155; color: #ffffff; }
+.story-pref-row { padding: 10px 0; }
+.story-css-box { font-family: monospace; background: #f8fafc; }
+*/
 
-/* ══ 空状态 ══ */
-.story-empty {
-  /* color: var(--c-story-placeholder); */
-}
-
-/* ══ 右键菜单 ══ */
-.story-ctx-menu {
-  /* background: var(--c-story-panel); */
-  /* border-radius: 10px; */
-}
-.story-ctx-btn {
-  /* color: var(--c-story-text); */
-}
-.story-ctx-btn-danger {
-  /* color: var(--c-danger); */
-}
-
-/* ══ 内联编辑 ══ */
-.story-inline-edit {
-  /* background: var(--c-story-input-bar); */
-  /* border-radius: 8px; */
-}
-.story-inline-edit-btn-save {
-  /* background: var(--c-story-send-bg-active); */
-  /* color: white; */
-}
-
-/* ══ 设置行 ══ */
-.story-pref-row {
-  /* padding: 10px 0; */
-}
-
-/* ══ CSS 编辑框 ══ */
-.story-css-box {
-  /* font-family: monospace; */
-  /* background: var(--c-story-code-bg); */
-}
+/* 16 自定义字体（可选；图床字体需支持跨域读取）
+@font-face { font-family: "我的剧情字体"; src: url("你的字体文件地址"); font-display: swap; }
+:root { --story-font: "我的剧情字体", serif !important; }
+*/
 `;
 
 

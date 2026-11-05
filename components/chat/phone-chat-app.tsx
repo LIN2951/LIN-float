@@ -69,6 +69,8 @@ export const PhoneChatApp = memo(function PhoneChatApp({ onClose, initialSession
     const [activeTab, setActiveTab] = useState<TabKey>("messages");
     const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
     const [activeMascot, setActiveMascot] = useState(false);
+    const [contactProfileOpen, setContactProfileOpen] = useState(false);
+    const [contactCall, setContactCall] = useState<{ id: string; sessionId: string; type: "voice" | "video" } | null>(null);
     // Chat app-level custom CSS (affects all chat pages, lower priority than per-session CSS)
     const [chatAppCSS, setChatAppCSS] = useState(() =>
         typeof window !== "undefined" ? kvGet("chat-app-custom-css") || "" : ""
@@ -132,6 +134,7 @@ export const PhoneChatApp = memo(function PhoneChatApp({ onClose, initialSession
     useEffect(() => {
         const handler = (event: Event) => {
             const scope = (event as CustomEvent<ChatScopeState>).detail || loadChatScope();
+            setContactCall(null);
             setActiveSession(current => current && sessionMatchesChatScope(current, scope) ? current : null);
             setVisitedSessions(current => {
                 const next = new Map(
@@ -308,7 +311,7 @@ export const PhoneChatApp = memo(function PhoneChatApp({ onClose, initialSession
         <div
             className="chat-app absolute inset-0 flex flex-col overflow-hidden z-10"
             {...(activeSession || activeMascot ? { "data-room-active": "" } : {})}
-            {...(hideTabBar ? { "data-tabbar-hidden": "" } : {})}
+            {...(hideTabBar || contactProfileOpen ? { "data-tabbar-hidden": "" } : {})}
         >
             {/* Homepage appearance CSS is the lowest chat styling layer. */}
             {chatAppCSS && <SessionCustomCSS css={chatAppCSS} scope=".chat-app" />}
@@ -319,6 +322,12 @@ export const PhoneChatApp = memo(function PhoneChatApp({ onClose, initialSession
                     <ChatContactsList
                         onCloseApp={onClose}
                         onSelectSession={handleSelectContact}
+                        selectForShare={Boolean(sharePayload)}
+                        onSubpageChange={setContactProfileOpen}
+                        onStartCall={(session, type) => {
+                            setContactCall({ id: `contact-call-${Date.now()}-${Math.random().toString(36).slice(2)}`, sessionId: session.id, type });
+                            setActiveMascot(false); setActiveSession(session); setActiveTab("messages");
+                        }}
                         onSelectMascot={handleSelectMascot}
                         pendingAddContactId={pendingAddContactId}
                         onPendingAddContactConsumed={() => setPendingAddContactId(null)}
@@ -338,7 +347,7 @@ export const PhoneChatApp = memo(function PhoneChatApp({ onClose, initialSession
             </div>
 
             {/* Bottom Navigation Bar — hide when inside a chat room */}
-            <nav className="chat-tab-bar chat-bottom-glass-bar" data-ui="nav" style={{ display: activeSession || activeMascot || hideTabBar ? "none" : undefined }}>
+            <nav className="chat-tab-bar chat-bottom-glass-bar" data-ui="nav" style={{ display: activeSession || activeMascot || hideTabBar || contactProfileOpen ? "none" : undefined }}>
                 <button
                     className={`chat-tab ${activeTab === "messages" ? "chat-tab-active" : ""}`}
                     onClick={() => setActiveTab("messages")}
@@ -374,6 +383,8 @@ export const PhoneChatApp = memo(function PhoneChatApp({ onClose, initialSession
                 <div key={sess.id} style={{ display: activeSession?.id === sess.id ? undefined : 'none' }} className="chat-room-layer absolute inset-0">
                     <ChatRoom
                         session={sess}
+                        contactCallRequest={contactCall?.sessionId === sess.id ? contactCall : undefined}
+                        onContactCallHandled={() => setContactCall(null)}
                         onBack={() => setActiveSession(null)}
                         onUserMessageSent={message => onUserMessageSent?.(message, sess)}
                         onDeleted={() => {

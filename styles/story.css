@@ -1127,8 +1127,24 @@
         .story-mini-phone-overlay { position: absolute; inset: 0; z-index: 330; min-height:0; box-sizing:border-box; display: flex; align-items: center; justify-content: center; padding: clamp(6px,2.5vh,20px); overflow:hidden; overscroll-behavior:contain; background: rgba(15,23,42,.22); backdrop-filter: blur(5px); }
         .story-floating-chat-app { position:relative; width:min(390px,94vw); height:min(720px,calc(100% - 8px)); max-height:calc(100% - 8px); min-height:0; overflow:hidden; border:7px solid #171717; border-radius:32px; background:var(--c-page-bg,#f8fafc); box-shadow:0 25px 80px rgba(15,23,42,.32); isolation:isolate; --app-text-scale:.82; --page-header-safe-top:0px; --safe-area-top:0px; --chat-tabbar-safe-bottom:0px; }
         .story-floating-chat-app>.chat-app { position:absolute!important; inset:0!important; width:100%; height:100%; min-height:0; }
+        .story-floating-chat-app { box-sizing:border-box; max-width:100%; border-width:1px; border-color:var(--c-border,#d1d5db); border-radius:18px; }
+        .story-phone-window-space { position:relative; width:100%; height:100%; min-width:0; min-height:0; }
+        .story-phone-window-frame { position:absolute; display:flex; flex-direction:column; min-width:0; min-height:0; border:1px solid var(--c-border,#d1d5db); border-radius:18px; overflow:hidden; background:var(--c-page-bg,#f8fafc); box-shadow:0 25px 80px rgba(15,23,42,.32); }
+        .story-phone-window-toolbar { display:flex; align-items:center; gap:4px; flex:0 0 36px; padding:0 6px; box-sizing:border-box; background:var(--c-page-header-bg,#f1f5f9); color:var(--c-text,#334155); border-bottom:1px solid var(--c-border,#e2e8f0); }
+        .story-phone-window-toolbar>span { font-size:11px; flex:1; white-space:nowrap; }
+        .story-phone-window-toolbar>button { display:grid; place-items:center; flex:0 0 24px; width:24px; height:26px; padding:0; border:0; border-radius:6px; background:transparent; color:inherit; }
+        .story-phone-window-toolbar>button:disabled { opacity:.3; }
+        .story-phone-window-toolbar>input { width:48px; min-width:24px; accent-color:var(--c-icon-active,#475569); }
+        .story-phone-window-toolbar>output { font-size:10px; width:30px; text-align:center; }
+        .story-phone-window-content { position:relative; flex:1 1 0; min-height:0; overflow:hidden; }
+        .story-phone-window-content>.story-floating-chat-app,.story-phone-window-content>.story-mini-phone { position:absolute; inset:0; box-sizing:border-box; width:100%; height:100%; max-height:none; max-width:none; border:0; border-radius:0; box-shadow:none; }
         .story-floating-chat-app .page-header-safe-area { min-height:0!important; height:0!important; }
-        .story-floating-chat-app .chat-input-bar { padding-bottom:8px; }
+        .story-floating-chat-app .chat-input-bar { position:relative; inset:auto; flex:0 0 auto; padding-bottom:8px; max-height:65%; overflow-y:auto; }
+        .story-floating-chat-app .chat-room-wrapper.page-shell { display:flex; flex-direction:column; min-height:0; height:100%; --chat-bottom-reserve:0px; }
+        .story-floating-chat-app .chat-room-wrapper > .page-header { position:relative; inset:auto; flex:0 0 auto; }
+        .story-floating-chat-app .chat-room-wrapper > .chat-plugin-header { position:relative; inset:auto; flex:0 0 auto; }
+        .story-floating-chat-app .chat-room-wrapper > .page-body { position:relative; inset:auto; flex:1 1 0; min-height:0; padding-top:12px; padding-bottom:12px; scroll-padding-bottom:12px; }
+        .story-floating-chat-app .chat-room-wrapper > .page-body::after { display:none; }
         /* Chat/Moments panels normally use viewport-fixed overlays. Inside the
            floating app that made their 100vw/100dvh box sit outside the clipped
            phone frame, so the state opened but the panel looked missing. Keep

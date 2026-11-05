@@ -14,8 +14,9 @@ import { emitChatPluginEvent, runChatPluginTransformSync } from "./chat-plugin-h
 import { parseAIResponse } from "./rich-message-parser";
 import { extractTextToolDirectiveText } from "./text-tool-protocol";
 import { findUserAvatarChangeIntent, inferAvatarDecisionFromReply } from "./chat-avatar-intent";
-import { loadChatScope } from "./chat-scope-storage";
+import { loadChatScope, resolveChatAccountUserIdentity } from "./chat-scope-storage";
 import type { Character } from "./character-types";
+import type { ChineseThinkingPromptLength } from "./chinese-thinking-prompt";
 
 export const DEFAULT_VISION_IMAGE_PROMPT_LIMIT = 1;
 export const MAX_VISION_IMAGE_PROMPT_LIMIT = 20;
@@ -41,6 +42,7 @@ export type ChatSession = {
     contactId: string;
     /** 独立聊天小号作用域；缺省表示主号。 */
     chatAccountId?: string;
+    userNickname?: string;
     lastMessageId?: string;
     lastMessagePreview?: string;
     unreadCount: number;
@@ -80,6 +82,10 @@ export type ChatSession = {
     visionImagePromptLimitUsesGlobal?: boolean;
     /** 流式生成（线上）：开启后该会话的线上 AI 回复边生成边显示（默认关，保持原整段请求行为） */
     streamOnline?: boolean;
+    /** 线上聊天附加中文角色独白提示词，使用现有思考展示区；默认关闭。 */
+    chineseThinkingPromptEnabled?: boolean;
+    /** 展示用中文独白的目标字数；未设置时约 100 字。 */
+    chineseThinkingPromptLength?: ChineseThinkingPromptLength;
     /** 流式生成（线下）：开启后该会话的线下 AI 回复边生成边显示（默认关，保持原整段请求行为） */
     streamOffline?: boolean;
     /**
@@ -759,10 +765,24 @@ export function compareChatMessages(a: ChatMessage, b: ChatMessage): number {
     return a.id.localeCompare(b.id);
 }
 
+let indexedMessages: ChatMessage[] | undefined;
+let indexedMessageCount = -1;
+const messagePositionsBySession = new Map<string, number[]>();
+
 function getSortedSessionMessages(sessionId: string): ChatMessage[] {
-    return _loadAllMessages()
-        .filter(m => m.sessionId === sessionId)
-        .sort(compareChatMessages);
+    const messages = _loadAllMessages();
+    // 缓存位置而非消息对象：编辑/撤回替换原对象时仍会读到最新内容。
+    if (indexedMessages !== messages || indexedMessageCount !== messages.length) {
+        messagePositionsBySession.clear();
+        messages.forEach((message, index) => {
+            const positions = messagePositionsBySession.get(message.sessionId) || [];
+            positions.push(index);
+            messagePositionsBySession.set(message.sessionId, positions);
+        });
+        indexedMessages = messages;
+        indexedMessageCount = messages.length;
+    }
+    return (messagePositionsBySession.get(sessionId) || []).map(index => messages[index]).sort(compareChatMessages);
 }
 
 function getNextMessageOrder(sessionId: string): number {
@@ -1473,6 +1493,11 @@ export function pushChatMessage(msg: Omit<ChatMessage, "id" | "createdAt" | "sta
         order: getNextMessageOrder(msg.sessionId),
         status: msg.status || "sent"
     };
+    if (newMsg.role === "user" && !newMsg.senderName) {
+        const owner = _sessionsCache.find(item => item.id === msg.sessionId);
+        const identity = resolveChatAccountUserIdentity(owner?.chatAccountId, owner?.isGroup ? undefined : owner?.contactId, owner?.isGroup ? "group_chat" : "chat");
+        newMsg.senderName = identity?.name || owner?.userNickname || "用户";
+    }
 
     // 聊天插件织入点：消息落库前同步改写（全部消息路径都会经过这里）
     const pluginResult = runChatPluginTransformSync("message.beforePersist", { message: newMsg });

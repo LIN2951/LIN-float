@@ -28,7 +28,8 @@ function normalizeScope(value: Partial<ChatScopeState> | null | undefined): Chat
     const selectedAccount = typeof value?.chatAccountId === "string"
         ? findChatAltAccount(value.chatAccountId)
         : null;
-    const userIdentityId = selectedAccount?.userIdentityId || (typeof value?.userIdentityId === "string"
+    const activeAccount = selectedAccount?.deletedAt ? null : selectedAccount;
+    const userIdentityId = activeAccount?.userIdentityId || (typeof value?.userIdentityId === "string"
         && identities.some(identity => identity.id === value.userIdentityId)
         ? value.userIdentityId
         : null);
@@ -36,7 +37,7 @@ function normalizeScope(value: Partial<ChatScopeState> | null | undefined): Chat
         && worlds.some(world => world.id === value.worldId)
         ? value.worldId
         : null;
-    return { userIdentityId, worldId, chatAccountId: selectedAccount?.id || null };
+    return { userIdentityId, worldId, chatAccountId: activeAccount?.id || null };
 }
 
 export function loadChatScope(): ChatScopeState {
@@ -92,7 +93,7 @@ export function resolveBoundUserIdentityId(characterId?: string, appId = "chat")
 
 export function characterMatchesChatScope(characterId: string, scope = loadChatScope()): boolean {
     if (!characterId) return false;
-    if (scope.userIdentityId && resolveBoundUserIdentityId(characterId, "chat") !== scope.userIdentityId) {
+    if (!scope.chatAccountId && scope.userIdentityId && resolveBoundUserIdentityId(characterId, "chat") !== scope.userIdentityId) {
         return false;
     }
     if (scope.worldId && getCharacterWorldGroupId(characterId) !== scope.worldId) {
@@ -103,7 +104,7 @@ export function characterMatchesChatScope(characterId: string, scope = loadChatS
 
 export function groupMatchesChatScope(participantIds: string[] | undefined, scope = loadChatScope()): boolean {
     const ids = (participantIds || []).filter(Boolean);
-    if (scope.userIdentityId && resolveBoundUserIdentityId(undefined, "group_chat") !== scope.userIdentityId) {
+    if (!scope.chatAccountId && scope.userIdentityId && resolveBoundUserIdentityId(undefined, "group_chat") !== scope.userIdentityId) {
         return false;
     }
     if (scope.worldId) {

@@ -26,6 +26,7 @@ import { pinyin } from "pinyin-pro";
 import { kvSet } from "@/lib/kv-db";
 import { scrollElementWithinContainer } from "@/lib/dom-scroll";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
+import { ContactProfilePage } from "./contact-profile-page";
 import { addChatAltAccountFriend, findChatAltAccount } from "@/lib/chat-alt-account-storage";
 import {
     DEFAULT_MASCOT_AVATAR,
@@ -39,6 +40,9 @@ type ChatContactsListProps = {
     onCloseApp: () => void;
     onSelectSession: (session: ChatSession | null) => void;
     onSelectMascot: () => void;
+    onStartCall?: (session: ChatSession, type: "voice" | "video") => void;
+    onSubpageChange?: (open: boolean) => void;
+    selectForShare?: boolean;
     /** 名片点击「加好友」：切到本 tab 后待打开添加页的角色 id */
     pendingAddContactId?: string | null;
     onPendingAddContactConsumed?: () => void;
@@ -46,7 +50,8 @@ type ChatContactsListProps = {
     onPendingAddContactBack?: () => void;
 };
 
-export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, pendingAddContactId, onPendingAddContactConsumed, onPendingAddContactBack }: ChatContactsListProps) {
+export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, onStartCall, onSubpageChange, selectForShare = false, pendingAddContactId, onPendingAddContactConsumed, onPendingAddContactBack }: ChatContactsListProps) {
+    const [profileCharacterId, setProfileCharacterId] = useState<string | null>(null);
     const [contacts, setContacts] = useState<(ChatContact & { char?: Character })[]>([]);
     const [contactFilter, setContactFilter] = useState("");
     const [latestPost, setLatestPost] = useState<Record<string, string>>({});
@@ -70,6 +75,11 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
     const deferredContactFilter = useDeferredValue(contactFilter);
     const bodyRef = useRef<HTMLDivElement>(null);
     const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    useEffect(() => {
+        onSubpageChange?.(Boolean(profileCharacterId));
+        return () => onSubpageChange?.(false);
+    }, [profileCharacterId, onSubpageChange]);
+    useEffect(() => { setProfileCharacterId(null); }, [chatScope, selectForShare, pendingAddContactId]);
 
     useEffect(() => {
         let cancelled = false;
@@ -208,10 +218,19 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
     const getCharForRequest = (req: FriendRequest) =>
         chars.find(c => c.id === req.characterId);
 
+    const profileCharacter = contacts.find(contact => contact.characterId === profileCharacterId)?.char;
+    if (profileCharacter) return <ContactProfilePage key={profileCharacter.id} character={profileCharacter}
+        onBack={() => setProfileCharacterId(null)}
+        onMessage={() => onSelectSession(createOrGetSession(profileCharacter.id))}
+        onCall={type => {
+            const session = createOrGetSession(profileCharacter.id);
+            if (onStartCall) onStartCall(session, type); else onSelectSession(session);
+        }} />;
+
     return (
         <div className="relative flex-1 h-full">
             <PageShell
-                title="Contacts"
+                title="联系人"
                 onBack={onCloseApp}
                 bodyRef={bodyRef}
                 rightAction={
@@ -235,13 +254,13 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                 {/* Search bar */}
                 <div className="pt-5 pb-1">
                     <div className="flex items-center justify-between mb-4 mt-2">
-                        <span className="ts-28 font-bold text-[var(--c-text-title)]">Contacts</span>
+                        <span className="ts-28 font-bold text-[var(--c-text-title)]">联系人</span>
                     </div>
                     <div className="chat-search-bar">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--c-icon)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                         <input
                             className="chat-search-input ts-15 w-full bg-transparent outline-none text-[var(--c-text-title)] placeholder:text-[var(--c-icon)]"
-                            placeholder="Search contacts..."
+                            placeholder="搜索联系人…"
                             value={contactFilter}
                             onChange={(e) => setContactFilter(e.target.value)}
                         />
@@ -263,7 +282,7 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                             </svg>
                         </div>
                         <div className="flex-1 overflow-hidden h-[48px] flex flex-col justify-center">
-                            <div className="ts-16 font-medium text-[var(--c-text-title)]">New Friends</div>
+                            <div className="ts-16 font-medium text-[var(--c-text-title)]">新的朋友</div>
                         </div>
                         {pendingRequests.length > 0 && (
                             <div className="minimal-unread-count ml-auto shrink-0">{pendingRequests.length}</div>
@@ -302,8 +321,8 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                                         <div
                                             key={c.id}
                                             onClick={() => {
-                                                const sess = createOrGetSession(char.id);
-                                                onSelectSession(sess);
+                                                if (selectForShare) onSelectSession(createOrGetSession(char.id));
+                                                else setProfileCharacterId(char.id);
                                             }}
                                             className="minimal-list-item"
                                         >

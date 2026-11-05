@@ -7,6 +7,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  Download,
+  Upload,
   Image as ImageIcon,
   MessageCircle,
   Search,
@@ -25,6 +27,9 @@ import {
 } from "@/lib/favorites-storage";
 import { getChatImageFromIndexedDB } from "@/lib/chat-asset-storage";
 import { isMediaStoreRef, loadMediaObjectUrl } from "@/lib/media-cache-storage";
+import { createBackupBlob, importBackupBlob } from "@/lib/data-management/backup";
+import { downloadFile } from "@/lib/download-utils";
+import type { FavoriteExportEntity } from "@/lib/favorites-transfer";
 
 type FavoritesTab = "chat" | "story" | "recent";
 
@@ -69,39 +74,7 @@ function categoryMatches(item: FavoriteItem, tab: FavoritesTab): boolean {
 }
 
 function FavoriteImage({ entry }: { entry: FavoriteEntry }) {
-  const [src, setSrc] = useState<string | null>(() => {
-    const raw = entry.mediaUrl || "";
-    return raw.startsWith("data:") || raw.startsWith("http") || raw.startsWith("blob:") ? raw : null;
-  });
-
-  useEffect(() => {
-    const raw = entry.mediaUrl || "";
-    if (!raw || src) return;
-    let revoked: string | null = null;
-    let cancelled = false;
-    const resolve = async () => {
-      if (raw.startsWith("asset://")) {
-        const value = await getChatImageFromIndexedDB(raw.slice(8));
-        if (!cancelled && value) setSrc(value);
-        return;
-      }
-      if (isMediaStoreRef(raw)) {
-        const value = await loadMediaObjectUrl(raw);
-        if (!cancelled && value) {
-          revoked = value;
-          setSrc(value);
-        }
-        return;
-      }
-      const value = await getChatImageFromIndexedDB(raw);
-      if (!cancelled && value) setSrc(value);
-    };
-    void resolve();
-    return () => {
-      cancelled = true;
-      if (revoked) URL.revokeObjectURL(revoked);
-    };
-  }, [entry.mediaUrl, src]);
+  const src = useFavoriteMediaUrl(entry.mediaUrl);
 
   if (!src) {
     return entry.imageDescription ? <p className="favorites-image-description">{entry.imageDescription}</p> : null;
@@ -112,7 +85,7 @@ function FavoriteImage({ entry }: { entry: FavoriteEntry }) {
 function useFavoriteMediaUrl(rawUrl?: string): string | null {
   const [src, setSrc] = useState<string | null>(() => {
     const raw = rawUrl || "";
-    return raw.startsWith("data:") || raw.startsWith("http") || raw.startsWith("blob:") ? raw : null;
+    return /^(?:data:|https?:|blob:|\/)/i.test(raw) ? raw : null;
   });
 
   useEffect(() => {
@@ -121,25 +94,24 @@ function useFavoriteMediaUrl(rawUrl?: string): string | null {
       setSrc(null);
       return;
     }
-    if (raw.startsWith("data:") || raw.startsWith("http") || raw.startsWith("blob:")) {
+    if (/^(?:data:|https?:|blob:|\/)/i.test(raw)) {
       setSrc(raw);
       return;
     }
-    if (!isMediaStoreRef(raw)) {
-      setSrc(null);
-      return;
-    }
+    setSrc(null);
     let cancelled = false;
     let objectUrl: string | null = null;
-    void loadMediaObjectUrl(raw).then(value => {
+    const storedMedia = isMediaStoreRef(raw);
+    const load = storedMedia ? loadMediaObjectUrl(raw) : getChatImageFromIndexedDB(raw.replace(/^asset:\/\//, ""));
+    void load.then(value => {
       if (!value) return;
       if (cancelled) {
-        URL.revokeObjectURL(value);
+        if (storedMedia) URL.revokeObjectURL(value);
         return;
       }
-      objectUrl = value;
+      if (storedMedia) objectUrl = value;
       setSrc(value);
-    });
+    }).catch(() => { if (!cancelled) setSrc(null); });
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -147,6 +119,11 @@ function useFavoriteMediaUrl(rawUrl?: string): string | null {
   }, [rawUrl]);
 
   return src;
+}
+
+function FavoriteVideo({ entry }: { entry: FavoriteEntry }) {
+  const src = useFavoriteMediaUrl(entry.mediaUrl);
+  return src ? <video className="favorites-entry-image" controls preload="metadata" src={src} onClick={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()} /> : <span>原视频文件已不可用</span>;
 }
 
 function FavoriteAudio({ entry }: { entry: FavoriteEntry }) {
@@ -182,6 +159,7 @@ function splitThinkingContent(content: string): { visible: string; thoughts: str
 
 function FavoriteEntryView({ entry, compact = false, foldThinking = false }: { entry: FavoriteEntry; compact?: boolean; foldThinking?: boolean }) {
   const parsed = foldThinking ? splitThinkingContent(entry.content) : { visible: entry.content, thoughts: [] };
+  const mediaType = entry.mediaType === "media_file" ? entry.mediaData?.fileType : entry.mediaType;
   return (
     <div className="favorites-entry" data-role={entry.role}>
       <div className="favorites-entry-meta">
@@ -189,8 +167,10 @@ function FavoriteEntryView({ entry, compact = false, foldThinking = false }: { e
         <span>{formatDate(entry.createdAt)}</span>
       </div>
       {parsed.visible && <p className={compact ? "favorites-entry-text is-compact" : "favorites-entry-text"}>{parsed.visible}</p>}
-      {entry.mediaType === "image" && <FavoriteImage entry={entry} />}
-      {entry.mediaType === "audio" && <FavoriteAudio entry={entry} />}
+      {mediaType === "image" && <FavoriteImage entry={entry} />}
+      {mediaType === "audio" && <FavoriteAudio entry={entry} />}
+      {mediaType === "video" && <FavoriteVideo entry={entry} />}
+      {mediaType === "sticker" && <FavoriteImage entry={{ ...entry, mediaUrl: typeof entry.mediaData?.stickerUrl === "string" ? entry.mediaData.stickerUrl : entry.mediaUrl }} />}
       {parsed.thoughts.length > 0 && (compact ? (
         <div className="favorites-thinking-compact">思考内容已折叠</div>
       ) : (
@@ -214,6 +194,13 @@ export function FavoritesApp({ onClose }: { onClose: () => void }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<FavoriteItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [dataOpen, setDataOpen] = useState(false);
+  const [exportCharacterId, setExportCharacterId] = useState("");
+  const [overwriteImport, setOverwriteImport] = useState(false);
+  const [transferBusy, setTransferBusy] = useState("");
+  const [transferStatus, setTransferStatus] = useState("");
+  const transferLock = useRef(false);
+  const importInput = useRef<HTMLInputElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressStarted = useRef(false);
 
@@ -227,6 +214,57 @@ export function FavoritesApp({ onClose }: { onClose: () => void }) {
     window.addEventListener(FAVORITES_UPDATED_EVENT, refresh);
     return () => window.removeEventListener(FAVORITES_UPDATED_EVENT, refresh);
   }, [refresh]);
+
+  const exportCharacters = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const item of items) {
+      if (item.entityType === "character") names.set(item.entityId, item.entityName);
+      item.participantIds.forEach((id, index) => {
+        if (!names.has(id)) names.set(id, item.participantNames[index] || id);
+      });
+    }
+    return Array.from(names, ([id, name]) => ({ id, name }));
+  }, [items]);
+
+  const exportFavorites = async (entity?: FavoriteExportEntity, name = "全部") => {
+    if (transferLock.current) return;
+    transferLock.current = true;
+    setTransferBusy("导出中…");
+    setTransferStatus("");
+    try {
+      const result = await createBackupBlob(["favorites"], { favoriteEntity: entity });
+      if (result.warnings.length) throw new Error(result.warnings.join("；"));
+      if (!result.manifest.totalRecords) throw new Error("没有可导出的收藏");
+      const safeName = name.replace(/[\\/:*?"<>|]/g, "_").slice(0, 40);
+      await downloadFile(result.blob, `收藏-${safeName}-${Date.now()}.zip`);
+      setTransferStatus(`已导出 ${result.manifest.totalRecords} 项收藏，包含语音、图片等媒体。`);
+    } catch (error) {
+      setTransferStatus(error instanceof Error ? error.message : "导出失败，请重试");
+    } finally {
+      transferLock.current = false;
+      setTransferBusy("");
+    }
+  };
+
+  const importFavorites = async (file: File) => {
+    if (transferLock.current) return;
+    transferLock.current = true;
+    setTransferBusy("导入中…");
+    setTransferStatus("");
+    try {
+      const result = await importBackupBlob(file, ["favorites"], { overwrite: overwriteImport });
+      await refresh();
+      setDetailItem(null);
+      setTransferStatus(!result.added && !result.skipped && !result.overwritten && !result.errors.length ? "文件中没有可导入的收藏。"
+        : `导入完成：新增 ${result.added} 项，跳过 ${result.skipped} 项，覆盖 ${result.overwritten} 项。${result.errors.length ? `有 ${result.errors.length} 处失败：${result.errors.slice(0, 2).join("；")}` : ""}`);
+      window.dispatchEvent(new CustomEvent(FAVORITES_UPDATED_EVENT));
+    } catch (error) {
+      setTransferStatus(error instanceof Error ? error.message : "导入失败，请重试");
+    } finally {
+      transferLock.current = false;
+      setTransferBusy("");
+    }
+  };
 
   const scopeOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -348,8 +386,17 @@ export function FavoritesApp({ onClose }: { onClose: () => void }) {
         left={<button className="page-header-btn" type="button" onClick={goBack} aria-label="返回"><ChevronLeft size={23} /></button>}
         right={selectedIds.size
           ? <button className="page-header-btn favorites-delete-head" type="button" onClick={() => void removeSelected()} aria-label="删除所选"><Trash2 size={19} /></button>
-          : <button className="page-header-btn" type="button" onClick={() => setFilterOpen(previous => !previous)} aria-label="筛选"><Filter size={19} /></button>}
+          : <div className="flex items-center gap-1">
+              <button className="page-header-btn" type="button" onClick={() => setDataOpen(true)} aria-label="收藏导入导出"><Download size={19} /></button>
+              <button className="page-header-btn" type="button" onClick={() => setFilterOpen(previous => !previous)} aria-label="筛选"><Filter size={19} /></button>
+            </div>}
       />
+
+      <input ref={importInput} type="file" accept=".zip,application/zip" className="hidden" onChange={event => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (file) void importFavorites(file);
+      }} />
 
       <div className="favorites-toolbar">
         <label className="favorites-search">
@@ -438,6 +485,29 @@ export function FavoritesApp({ onClose }: { onClose: () => void }) {
         <button type="button" data-active={tab === "story" ? "1" : "0"} onClick={() => { setTab("story"); setSelectedEntity(null); }}><Bookmark size={18} /><span>剧情</span></button>
         <button type="button" data-active={tab === "recent" ? "1" : "0"} onClick={() => { setTab("recent"); setSelectedEntity(null); }}><ImageIcon size={18} /><span>最近收藏</span></button>
       </nav>
+
+      {dataOpen && (
+        <div className="favorites-detail-backdrop" onClick={() => { if (!transferBusy) setDataOpen(false); }}>
+          <section className="favorites-detail" role="dialog" aria-modal="true" aria-label="收藏导入导出" onClick={event => event.stopPropagation()}>
+            <header><strong>收藏导入导出</strong><button type="button" disabled={Boolean(transferBusy)} onClick={() => setDataOpen(false)} aria-label="关闭"><X size={19} /></button></header>
+            <div className="favorites-detail-body flex flex-col gap-3">
+              <p className="menu-desc">导出包含聊天、剧情、动态收藏及语音、图片，不受搜索、标签、账号筛选影响。</p>
+              <button type="button" className="ui-btn ui-btn-primary" disabled={Boolean(transferBusy) || loading} onClick={() => void exportFavorites()}><Download size={16} />导出全部收藏</button>
+              {selectedEntity && <button type="button" className="ui-btn ui-btn-ghost" disabled={Boolean(transferBusy)} onClick={() => void exportFavorites({ id: selectedEntity.id, type: selectedEntity.type }, selectedEntity.name)}>导出{selectedEntity.name}的全部收藏</button>}
+              <label className="flex flex-col gap-2"><span className="menu-label">单个角色</span>
+                <select className="ui-input" value={exportCharacterId} disabled={Boolean(transferBusy)} onChange={event => setExportCharacterId(event.target.value)}>
+                  <option value="">选择角色</option>
+                  {exportCharacters.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
+                </select>
+              </label>
+              <button type="button" className="ui-btn ui-btn-ghost" disabled={Boolean(transferBusy) || !exportCharacterId} onClick={() => void exportFavorites({ id: exportCharacterId, type: "character" }, exportCharacters.find(character => character.id === exportCharacterId)?.name)}>导出所选角色全部收藏</button>
+              <label className="flex items-center gap-2 menu-desc"><input type="checkbox" checked={overwriteImport} disabled={Boolean(transferBusy)} onChange={event => setOverwriteImport(event.target.checked)} />导入时覆盖已存在的收藏</label>
+              <button type="button" className="ui-btn ui-btn-ghost" disabled={Boolean(transferBusy)} onClick={() => importInput.current?.click()}><Upload size={16} />导入收藏文件</button>
+              <p className="menu-desc" role="status">{transferBusy || transferStatus}</p>
+            </div>
+          </section>
+        </div>
+      )}
 
       {detailItem && (
         <div className="favorites-detail-backdrop" onClick={() => setDetailItem(null)}>

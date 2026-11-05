@@ -18,6 +18,8 @@ import {
     CHAT_ALT_ACCOUNTS_UPDATED_EVENT,
     createChatAltAccount,
     loadChatAltAccounts,
+    updateChatAltAccount,
+    deleteChatAltAccount,
 } from "@/lib/chat-alt-account-storage";
 
 export function ChatScopeSwitcher({ onScopeChange }: { onScopeChange?: (scope: ChatScopeState) => void }) {
@@ -25,7 +27,8 @@ export function ChatScopeSwitcher({ onScopeChange }: { onScopeChange?: (scope: C
     const [expanded, setExpanded] = useState<"account" | "identity" | "world" | null>(null);
     const [scope, setScope] = useState<ChatScopeState>(() => loadChatScope());
     const [creatingAccount, setCreatingAccount] = useState(false);
-    const [accountDraft, setAccountDraft] = useState({ userIdentityId: "", nickname: "", gender: "", age: "", signature: "" });
+    const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+    const [accountDraft, setAccountDraft] = useState({ userIdentityId: "", nickname: "", gender: "", age: "", signature: "", avatarUrl: "" });
 
     useEffect(() => {
         const sync = () => setScope(loadChatScope());
@@ -56,10 +59,8 @@ export function ChatScopeSwitcher({ onScopeChange }: { onScopeChange?: (scope: C
 
     const identities = open ? loadUserIdentities() : [];
     const allWorlds = open ? loadCharacterWorldGroups() : [];
-    const worlds = scope.chatAccountId && scope.userIdentityId
-        ? allWorlds.filter(world => world.memberIds.some(characterId => resolveBoundUserIdentityId(characterId, "chat") === scope.userIdentityId))
-        : allWorlds;
-    const accounts = open ? loadChatAltAccounts() : [];
+    const worlds = allWorlds;
+    const accounts = open ? loadChatAltAccounts().filter(account => !account.deletedAt) : [];
     const isFiltered = Boolean(scope.chatAccountId || scope.userIdentityId || scope.worldId);
 
     return (
@@ -108,24 +109,44 @@ export function ChatScopeSwitcher({ onScopeChange }: { onScopeChange?: (scope: C
                                                     setExpanded(null);
                                                 }}
                                             />
-                                            {accounts.map(account => (
+                                            {Array.from(new Set(accounts.map(account => account.userIdentityId))).map(identityId => (
+                                                <details key={identityId} open className="my-1 rounded-xl border border-[var(--c-border)]">
+                                                <summary className="cursor-pointer px-3 py-2 ts-12">{identities.find(item => item.id === identityId)?.name || "未分组身份"}</summary>
+                                                {accounts.filter(account => account.userIdentityId === identityId).map(account => (
+                                                <div key={account.id}>
                                                 <ScopeOption
                                                     key={account.id}
                                                     label={account.nickname}
                                                     description={`${identities.find(item => item.id === account.userIdentityId)?.name || "身份已失效"}${account.signature ? ` · ${account.signature}` : ""}`}
-                                                    image={identities.find(item => item.id === account.userIdentityId)?.avatarUrl}
+                                                    image={account.avatarUrl}
                                                     selected={scope.chatAccountId === account.id}
                                                     onClick={() => {
                                                         update({ chatAccountId: account.id, userIdentityId: account.userIdentityId, worldId: null });
                                                         setExpanded(null);
                                                     }}
                                                 />
+                                                <div className="flex justify-end gap-3 px-3 pb-2 ts-12">
+                                                    <button type="button" onClick={() => {
+                                                        setEditingAccountId(account.id);
+                                                        setAccountDraft({ ...account, avatarUrl: account.avatarUrl || "" });
+                                                        setCreatingAccount(true);
+                                                    }}>编辑</button>
+                                                    <button type="button" onClick={() => {
+                                                        if (!window.confirm(`删除“${account.nickname}”？历史聊天和记忆将保留。`)) return;
+                                                        deleteChatAltAccount(account.id);
+                                                        if (scope.chatAccountId === account.id) update({ chatAccountId: null, userIdentityId: null, worldId: null });
+                                                    }}>删除</button>
+                                                </div>
+                                                </div>
+                                                ))}
+                                                </details>
                                             ))}
                                             <button
                                                 type="button"
                                                 className="menu-item w-full text-left"
                                                 onClick={() => {
-                                                    setAccountDraft({ userIdentityId: identities[0]?.id || "", nickname: "", gender: "", age: "", signature: "" });
+                                                    setAccountDraft({ userIdentityId: identities[0]?.id || "", nickname: "", gender: "", age: "", signature: "", avatarUrl: "" });
+                                                    setEditingAccountId(null);
                                                     setCreatingAccount(true);
                                                 }}
                                             >
@@ -136,12 +157,13 @@ export function ChatScopeSwitcher({ onScopeChange }: { onScopeChange?: (scope: C
                                     ) : (
                                         <div className="flex flex-col gap-3 px-2 py-3">
                                             <label className="flex flex-col gap-1 ts-12 text-[var(--c-text)]">
-                                                <span>关联用户身份</span>
+                                                <span>收纳到用户身份</span>
                                                 <select className="ui-input" value={accountDraft.userIdentityId} onChange={event => setAccountDraft(current => ({ ...current, userIdentityId: event.target.value }))}>
                                                     {identities.map(identity => <option key={identity.id} value={identity.id}>{identity.name || "未命名身份"}</option>)}
                                                 </select>
                                             </label>
                                             <label className="flex flex-col gap-1 ts-12 text-[var(--c-text)]"><span>网名</span><input className="ui-input" value={accountDraft.nickname} onChange={event => setAccountDraft(current => ({ ...current, nickname: event.target.value }))} placeholder="必填" /></label>
+                                            <label className="flex flex-col gap-1 ts-12 text-[var(--c-text)]"><span>头像地址</span><input className="ui-input" value={accountDraft.avatarUrl} onChange={event => setAccountDraft(current => ({ ...current, avatarUrl: event.target.value }))} placeholder="选填" /></label>
                                             <div className="grid grid-cols-2 gap-2">
                                                 <label className="flex flex-col gap-1 ts-12 text-[var(--c-text)]"><span>性别</span><input className="ui-input" value={accountDraft.gender} onChange={event => setAccountDraft(current => ({ ...current, gender: event.target.value }))} placeholder="选填" /></label>
                                                 <label className="flex flex-col gap-1 ts-12 text-[var(--c-text)]"><span>年龄</span><input className="ui-input" value={accountDraft.age} onChange={event => setAccountDraft(current => ({ ...current, age: event.target.value }))} placeholder="选填" /></label>
@@ -154,7 +176,10 @@ export function ChatScopeSwitcher({ onScopeChange }: { onScopeChange?: (scope: C
                                                     className="ui-btn ui-btn-primary"
                                                     disabled={!accountDraft.userIdentityId || !accountDraft.nickname.trim()}
                                                     onClick={() => {
-                                                        const account = createChatAltAccount(accountDraft);
+                                                        const account = editingAccountId
+                                                            ? accounts.find(item => item.id === editingAccountId)!
+                                                            : createChatAltAccount(accountDraft);
+                                                        updateChatAltAccount(account.id, accountDraft);
                                                         update({ chatAccountId: account.id, userIdentityId: account.userIdentityId, worldId: null });
                                                         setCreatingAccount(false);
                                                         setExpanded(null);

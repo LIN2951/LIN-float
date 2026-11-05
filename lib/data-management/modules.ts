@@ -163,6 +163,7 @@ const PRIMARY_DATA_MODULES: DataModuleDefinition[] = [
           "moments_cover_asset_v1",
           "moments_cover_asset_id",
           "moments_signature",
+          "moments_identity_profiles_v1",
           "ai_phone_sticker_packs_v1",
           "ai_phone_sticker_assign_v1",
           "ai_phone_mascot_settings_v1",
@@ -189,6 +190,8 @@ const PRIMARY_DATA_MODULES: DataModuleDefinition[] = [
           "ai_phone_mem_last_sum_",
           "ai_phone_mem_core_count_",
           "ai_phone_mem_last_core_sum_",
+          "ai_phone_manual_short_term_memory:",
+          "ai_phone_hidden_short_term_memory:",
           "note_wall_events_",
           "ai_phone_interview_magazine_events_",
           "ai_phone_cocreate_events_",
@@ -207,12 +210,11 @@ const PRIMARY_DATA_MODULES: DataModuleDefinition[] = [
   {
     id: "social",
     label: "社交内容",
-    description: "朋友圈、收藏、小红书、好友申请和社交互动状态",
+    description: "朋友圈、小红书、好友申请和社交互动状态",
     variant: "action",
     sources: [
       // Moments posts & comments live in their own DB (per-record rows).
       { type: "indexeddb", dbName: "AiPhoneMomentsDB", label: "朋友圈记录" },
-      { type: "indexeddb", dbName: "AiPhoneFavoritesDB", label: "收藏记录" },
       {
         type: "kv",
         label: "社交状态与小红书",
@@ -220,6 +222,7 @@ const PRIMARY_DATA_MODULES: DataModuleDefinition[] = [
           "ai_phone_moments_ai_schedule_v1",
           "ai_phone_moments_pending_reactions_v1",
           "ai_phone_moments_config_v1",
+          "ai_phone_character_moments_profiles_v1",
           "ai_phone_moments_last_seen_v1",
           "ai_phone_character_worlds_v1",
           "ai_phone_character_world_layout_v1",
@@ -229,6 +232,14 @@ const PRIMARY_DATA_MODULES: DataModuleDefinition[] = [
         prefixes: ["checkphone:xiaohongshu:readThreads", "xiaohongshu_events_", "ai_phone_xiaohongshu_events_"],
       },
     ],
+  },
+  {
+    id: "favorites",
+    label: "收藏",
+    description: "全部聊天、剧情和动态收藏，包含语音、图片等媒体",
+    variant: "action",
+    large: true,
+    sources: [{ type: "indexeddb", dbName: "AiPhoneFavoritesDB", label: "收藏记录" }],
   },
   {
     id: "apps",
@@ -345,6 +356,8 @@ const PRIMARY_DATA_MODULES: DataModuleDefinition[] = [
           "ai_phone_vn_sprites_v1",
           // 剧情公用方案仓库（文风/状态栏/小剧场/快捷输入方案），随创作模块备份
           "ai_phone_story_scheme_repo_v1",
+          "ai_phone_story_appearance_presets_v1",
+          "ai_phone_story_floating_phone_scale_v1",
           "map_adventure_interaction_config_v1",
           "map_dm_prompts",
           "map_dm_token_config",
@@ -370,7 +383,7 @@ const PRIMARY_DATA_MODULES: DataModuleDefinition[] = [
           "mixology_builtin_version_v1",
           "mixology_profile_v1",
         ],
-        prefixes: ["map_world_theme_", "map_adventure_summary_", "ai_phone_black_market_theater_events_"],
+        prefixes: ["map_world_theme_", "map_adventure_summary_", "ai_phone_black_market_theater_events_", "ai_phone_story_input_draft_v1_"],
       },
     ],
   },

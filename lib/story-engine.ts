@@ -37,6 +37,19 @@ const STORY_VOICE_FORMAT_PROMPT = `# 剧情正文格式
 - 对白标点唯一格式：无论用户或历史消息里的对话使用什么标点形式（“”、""、『』、''等），你输出的角色对白一律使用「」，不要模仿用户的标点。
 旁白、动作以及用户的话不得写进「」；不要解释这些格式，也不要输出额外的语音清单。`;
 
+function buildStoryBodyFormatPrompt(settings?: StoryCharacterSettings): string {
+  let prompt = STORY_VOICE_FORMAT_PROMPT;
+  if (settings?.innerThoughtGenerationEnabled === true) {
+    prompt = prompt.replace("- *心声*：包裹角色没有说出口的内心想法。",
+      "- *心声*：请结合在场角色的人设、经历和当前情境，自然补充适量未说出口的心理描写，用单个星号包裹为 *心声内容*。只描写角色，不替用户编造心理或决定；按剧情需要适量使用，保留正常的旁白、动作和对白。");
+  }
+  if (settings?.emphasisGenerationEnabled === true) {
+    prompt = prompt.replace("- ~强调~：只强调需要突出的短语。",
+      "- **重点**：请结合当前剧情，适量选出重要的情绪、动作或句子，用双星号包裹为 **重点内容**。避免整段加粗，避免反复强调同一句话。");
+  }
+  return prompt;
+}
+
 export type StoryGenerationOptions = {
   sessionFoldTags?: string;
   sessionContextExcludedTags?: string;
@@ -443,7 +456,7 @@ async function buildStoryPromptMessages(
   if (!independent && settings?.floatingPhoneInContext && floatingChatContext?.trim()) {
     messages.push({ role: "system", content: `# 悬浮小手机最近线上聊天\n以下记录用于衔接线上与线下剧情，不要逐字复述：\n${floatingChatContext.trim()}` });
   }
-  messages.push({ role: "system", content: STORY_VOICE_FORMAT_PROMPT });
+  messages.push({ role: "system", content: buildStoryBodyFormatPrompt(settings) });
   return messages;
 }
 

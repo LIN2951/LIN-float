@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import { downloadFile, type DownloadFileOptions } from "../download-utils";
 import { sha256BlobHex } from "../sha256-stream";
+import { createFavoriteExportTransform, type FavoriteExportEntity } from "../favorites-transfer";
 import { CLOUD_CREDENTIAL_KV_KEYS, DATA_MODULES } from "./modules";
 import { clearSource, exportSource, importSource, inspectSource } from "./idb";
 import { createMediaCollector, estimateValueBytes, utf8Bytes, type MediaCollector, type MediaResolver } from "./serializers";
@@ -151,6 +152,8 @@ export async function inspectData(): Promise<DataSnapshot> {
 }
 
 export type BackupOptions = {
+  /** Standalone favorites export: all categories and account scopes for this entity. */
+  favoriteEntity?: FavoriteExportEntity;
   /** Strip embedded images/audio/video (keeps text/config/structure + avatars). */
   excludeMedia?: boolean;
   /** Keep only recent dynamic images; avatars and desktop/theme assets stay complete. */
@@ -240,7 +243,9 @@ export async function buildSingleSourcePayload(
   const imageCutoffMs = options.dynamicImageDays
     ? Date.now() - options.dynamicImageDays * 24 * 60 * 60 * 1000
     : undefined;
-  let sourcePayload = await exportSource(source, moduleCollector, stripping, imageCutoffMs);
+  const favoriteSource = source.type === "indexeddb" && source.dbName === "AiPhoneFavoritesDB";
+  let sourcePayload = await exportSource(source, moduleCollector, stripping, imageCutoffMs,
+    favoriteSource ? createFavoriteExportTransform(options.favoriteEntity, stripping, moduleCollector) : undefined);
   if (stripping) sourcePayload = stripMediaFromSource(sourcePayload);
   const records = countSourceRecords(sourcePayload);
   const payload: ModulePayload = { moduleId: dataModule.id, sources: [sourcePayload] };
@@ -542,9 +547,23 @@ export async function importBackupBlob(blob: Blob, moduleIds?: DataModuleId[], o
       total.errors.push(`${fileName}: 解析失败`);
       continue;
     }
-    if (selected && !selected.has(modulePayload.moduleId)) continue;
     for (const sourcePayload of modulePayload.sources) {
-      const result = await importSource(sourcePayload, Boolean(options.overwrite), resolver);
+      const isFavorites = sourcePayload.type === "indexeddb" && sourcePayload.dbName === "AiPhoneFavoritesDB";
+      const effectiveModuleId = isFavorites ? "favorites" : modulePayload.moduleId;
+      // Older archives kept favorites inside social. Keep restoring those archives,
+      // and allow the Favorites app to extract just its own records from them.
+      const legacySocialSelected = isFavorites && modulePayload.moduleId === "social" && selected?.has("social");
+      if (selected && !selected.has(effectiveModuleId) && !legacySocialSelected) continue;
+      if (effectiveModuleId === "favorites" && (!isFavorites || sourcePayload.stores.some(store => store.name !== "items" || store.keyPath !== "id" || store.autoIncrement))) {
+        total.errors.push("收藏备份包含不支持的数据源，已跳过");
+        continue;
+      }
+      const sourceResolver: MediaResolver = isFavorites ? async ref => {
+        const media = await resolver(ref);
+        if (!media) throw new Error("收藏媒体缺失或损坏，未写入该条收藏");
+        return media;
+      } : resolver;
+      const result = await importSource(sourcePayload, Boolean(options.overwrite), sourceResolver);
       total.added += result.added;
       total.skipped += result.skipped;
       total.overwritten += result.overwritten;

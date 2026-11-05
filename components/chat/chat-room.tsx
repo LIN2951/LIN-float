@@ -8,6 +8,7 @@ import { parseStateValues, mergeStateValues } from "@/lib/state-value-parser";
 import { parseAIResponse, type ParsedMessagePart } from "@/lib/rich-message-parser";
 import { isKnownStickerLabel } from "@/lib/sticker-data";
 import { translateReasoningText } from "@/lib/reasoning-translate";
+import { withChineseThinkingPrompt } from "@/lib/chinese-thinking-prompt";
 import { MessageBubble, MediaDetailModal, prewarmStickerCache, BilingualTextBlock, isStandaloneHtmlPreviewContent, normalizeTextBubbleContent } from "./message-bubble";
 import { GeneratedImageErrorDialog } from "./generated-image-error-dialog";
 import { PhotoInputModal, TextPhotoModal, VoiceRecordModal, RedPacketModal, LocationInputModal, SystemInstructionModal } from "./rich-input-modals";
@@ -492,6 +493,8 @@ type ChatRoomProps = {
     onDeleted?: () => void;
     /** Embedded callers can observe user-sent rich messages without duplicating chat logic. */
     onUserMessageSent?: (message: ChatMessage) => void;
+    contactCallRequest?: { id: string; type: "voice" | "video" };
+    onContactCallHandled?: () => void;
 };
 
 type OfflineActionTarget = {
@@ -1112,7 +1115,7 @@ const OfflineTextInputBar = memo(forwardRef<OfflineTextInputHandle, {
     );
 }));
 
-export function ChatRoom({ session, onBack, onDeleted, onUserMessageSent }: ChatRoomProps) {
+export function ChatRoom({ session, onBack, onDeleted, onUserMessageSent, contactCallRequest, onContactCallHandled }: ChatRoomProps) {
     const [liveCSS, setLiveCSS] = useState(session.customCSS || "");
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [transientMessages, setTransientMessages] = useState<ChatMessage[]>([]);
@@ -1164,6 +1167,15 @@ export function ChatRoom({ session, onBack, onDeleted, onUserMessageSent }: Chat
     const [callMinimized, setCallMinimized] = useState(false);
     const [callInitiator, setCallInitiator] = useState<"user" | "character">("user");
     const [callInitiatorName, setCallInitiatorName] = useState<string>("");
+    const handledContactCall = useRef<string | null>(null);
+    useEffect(() => {
+        if (!contactCallRequest || handledContactCall.current === contactCallRequest.id) return;
+        handledContactCall.current = contactCallRequest.id;
+        cancelFollowUp(session.id);
+        setShowPlusMenu(false); setCallInitiator("user");
+        if (contactCallRequest.type === "voice") setShowVoiceCall(true); else setShowVideoCall(true);
+        onContactCallHandled?.();
+    }, [contactCallRequest, onContactCallHandled, session.id]);
     const [userIdentity, setUserIdentity] = useState<UserIdentity | null>(null);
     const [enterToSendEnabled, setEnterToSendEnabled] = useState(() => loadChatAppSettings().enterToSendEnabled === true);
     const [storyEntryEnabled, setStoryEntryEnabled] = useState(() => loadChatAppSettings().storyAsOfflineMode === true);
@@ -1662,7 +1674,11 @@ export function ChatRoom({ session, onBack, onDeleted, onUserMessageSent }: Chat
     const streamPreviewTagConfig = useMemo(() => {
         const bindings = loadBindingConfig();
         const slot = resolveBinding(bindings, session.isGroup ? undefined : session.contactId, session.isGroup ? "group_chat" : "chat");
-        const preset = loadPresets().find(item => item.id === slot.presetId) || null;
+        const presets = loadPresets();
+        const preset = withChineseThinkingPrompt(
+            presets.find(item => item.id === slot.presetId) || presets.find(item => item.builtIn) || null,
+            session.chineseThinkingPromptEnabled === true,
+        );
         const withThoughtCompat = (tag: string): string[] => (tag === "thinking" ? ["thinking", "thought", "think"] : [tag]);
         return {
             online: preset?.online_thinking_enabled === true
@@ -1675,7 +1691,7 @@ export function ChatRoom({ session, onBack, onDeleted, onUserMessageSent }: Chat
             // 预设「剔除文本」：引擎最终会删，预览阶段同步删，避免闪现（字面量删除，成本极低）
             stripTexts: (preset?.strip_texts || []).filter(Boolean),
         };
-    }, [regexRevision, session.contactId, session.isGroup]);
+    }, [regexRevision, session.contactId, session.isGroup, session.chineseThinkingPromptEnabled]);
 
     const displayRegexMacroEngine = useMemo(() => {
         const charName = session.isGroup
@@ -3393,6 +3409,9 @@ export function ChatRoom({ session, onBack, onDeleted, onUserMessageSent }: Chat
         setGenerationLock(session.id);
 
         try {
+            // 先让输入区与生成状态完成绘制，再开始本地上下文装配。
+            await new Promise<void>(resolve => requestAnimationFrame(() => { setTimeout(resolve, 0); }));
+            if (!isCurrentGeneration()) return;
             const trimmedRetryInstruction = retryInstruction?.trim();
             let generationHistory: ChatMessage[] = trimmedRetryInstruction
                 ? [...history, {
@@ -4201,7 +4220,7 @@ export function ChatRoom({ session, onBack, onDeleted, onUserMessageSent }: Chat
             setPendingGenerate(true);
             // 按回复键发送：消息落库后立即触发模型回复（无论插件是否异步改写，
             // 都在消息真正写入后触发，避免回复基于旧上下文）
-            if (options?.autoReply) void triggerAIResponse();
+            if (options?.autoReply) requestAnimationFrame(() => { void triggerAIResponse(); });
         };
 
         // 聊天插件织入点 user.beforeSend：无插件时走原同步路径，
@@ -4728,6 +4747,7 @@ export function ChatRoom({ session, onBack, onDeleted, onUserMessageSent }: Chat
     };
 
     const handleRetry = async (msgId: string, retryInstruction?: string) => {
+        if (isGeneratingRef.current) return;
         const msgIndex = messages.findIndex(m => m.id === msgId);
         if (msgIndex === -1 || messages[msgIndex].role !== "assistant") return;
 

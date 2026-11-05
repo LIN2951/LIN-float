@@ -99,6 +99,7 @@ const MODULE_ICONS: Record<DataModuleId, LucideIcon> = {
   desktop: Palette,
   memory: Brain,
   social: UsersRound,
+  favorites: Archive,
   apps: Smartphone,
   resource_hub: Store,
   creative: Sparkles,
@@ -112,6 +113,7 @@ const MODULE_ACCENTS: Record<DataModuleId, string> = {
   desktop: BINDING_ACCENTS.voice,
   memory: BINDING_ACCENTS.memory,
   social: CONTENT_APP_ACCENTS.moments,
+  favorites: CONTENT_APP_ACCENTS.chat,
   apps: CONTENT_APP_ACCENTS.calendar,
   resource_hub: CONTENT_APP_ACCENTS.shopping,
   creative: CONTENT_APP_ACCENTS.story,
@@ -798,7 +800,7 @@ export function DataManagement({ onNotice }: DataManagementProps) {
           <div className="menu-item data-readonly-item">
             <div className="menu-label-group">
               <span className="menu-label">导出模块</span>
-              <span className="menu-desc">已选择 {selectedExportModules.length} / {DATA_MODULES.length} 个模块</span>
+              <span className="menu-desc">已选择 {selectedExportModules.length} / {DATA_MODULES.length} 个模块；收藏可单独取消</span>
             </div>
             <div className="menu-right data-inline-actions">
               <button type="button" className="ui-btn ui-btn-outline py-1 px-3 ts-12" onClick={() => setSelectedExportModules(ALL_MODULE_IDS)}>

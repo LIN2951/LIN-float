@@ -43,7 +43,6 @@ import {
 } from "@/lib/interview-magazine-storage";
 import {
   deleteInterviewMagazineProjectionEventForIssue,
-  recordInterviewMagazineProjectionEvent,
 } from "@/lib/interview-magazine-memory";
 import {
   INTERVIEW_MAGAZINE_DEFAULT_HOST_PROMPT,
@@ -56,9 +55,11 @@ import {
   type InterviewIssue,
   type InterviewMessage,
 } from "@/lib/interview-magazine-types";
-import { incrementEventCounter } from "@/lib/memory-storage";
-import { maybeRunSummarization } from "@/lib/memory-summarizer";
+import { InterviewMemoryPanel } from "./interview-memory-panel";
 import { loadUserIdentities, resolveUserIdentity } from "@/lib/settings-storage";
+import { InterviewLiveSession, InterviewOptionsEditor } from "./interview-live-session";
+import { DEFAULT_INTERVIEW_OPTIONS, normalizeInterviewOptions } from "@/lib/interview-magazine-options";
+import type { InterviewOptions, InterviewLiveSnapshot } from "@/lib/interview-magazine-types";
 
 type Props = {
   onClose: () => void;
@@ -139,6 +140,10 @@ function getIssueGuestNames(issue: InterviewIssue): string[] {
 }
 
 function getIssueParticipantText(issue: InterviewIssue): string {
+  if (issue.options && !issue.transcript.some(message => message.role === "user" && message.kind !== "question")) {
+    const host = issue.transcript.some(message => message.role === "user" && message.kind === "question");
+    return `${getIssueGuestNames(issue).join("、")}${host ? ` · 主持：${issue.userName}` : ""}`;
+  }
   return `${getIssueGuestNames(issue).join("、")} · ${issue.userName || "共同受访者"}`;
 }
 
@@ -202,6 +207,14 @@ export function InterviewMagazineApp({ onClose }: Props) {
   const composeRunRef = useRef(0);
   const resumeActionRef = useRef<InterviewResumeAction | null>(null);
   const interviewRunRef = useRef(0);
+  const legacyAbortRef = useRef<AbortController | null>(null);
+  const composeAbortRef = useRef<AbortController | null>(null);
+  const [interviewOptions, setInterviewOptions] = useState<InterviewOptions>(DEFAULT_INTERVIEW_OPTIONS);
+  const [useLiveInterview, setUseLiveInterview] = useState(false);
+  const [liveInitial, setLiveInitial] = useState<InterviewLiveSnapshot | undefined>();
+  const [liveKey, setLiveKey] = useState("");
+  const liveDraftId = useRef<string | null>(null);
+  useEffect(() => () => { interviewRunRef.current++; composeRunRef.current++; legacyAbortRef.current?.abort(); composeAbortRef.current?.abort(); }, []);
 
   useEffect(() => {
     setIssues(loadInterviewIssues());
@@ -243,6 +256,9 @@ export function InterviewMagazineApp({ onClose }: Props) {
     || characters[0]?.avatar;
 
   const resetDraft = () => {
+    setUseLiveInterview(false);
+    setLiveInitial(undefined);
+    liveDraftId.current = null;
     setTheme("");
     setMessages([]);
     setPhase("opening");
@@ -276,12 +292,16 @@ export function InterviewMagazineApp({ onClose }: Props) {
   };
 
   const startInterviewRun = () => {
+    legacyAbortRef.current?.abort();
+    legacyAbortRef.current = new AbortController();
     const runId = interviewRunRef.current + 1;
     interviewRunRef.current = runId;
     return runId;
   };
 
   const stopInterviewRun = () => {
+    legacyAbortRef.current?.abort();
+    legacyAbortRef.current = null;
     interviewRunRef.current += 1;
   };
 
@@ -344,6 +364,13 @@ export function InterviewMagazineApp({ onClose }: Props) {
     startInterviewRun();
     const action = inferDraftResumeAction(draft);
     setActiveDraftId(draft.id);
+    liveDraftId.current = draft.id;
+    setUseLiveInterview(Boolean(draft.options));
+    setInterviewOptions(normalizeInterviewOptions(draft.options));
+    setLiveInitial(draft.liveState || { messages: draft.transcript, round: draft.characterRounds,
+      userAsGuest: !draft.options || draft.options.participation === "guest", question: "",
+      phase: draft.status === "awaiting_user" ? "awaiting_user" : draft.status === "done" ? "done" : "stopped" });
+    setLiveKey(draft.id);
     setTheme(draft.theme);
     setSelectedCharacterIds(draft.characterIds);
     setUserIdentityId(draft.userIdentityId || resolveSuggestedIdentityId(draft.characterIds, userIdentities));
@@ -393,38 +420,13 @@ export function InterviewMagazineApp({ onClose }: Props) {
 
   const startInterview = async () => {
     const trimmedTheme = theme.trim();
-    if (!trimmedTheme || selectedCharacterIds.length === 0) return;
+    if (!trimmedTheme || !selectedCharacterIds.length) return;
     resetDraft();
-    const runId = startInterviewRun();
     setTheme(trimmedTheme);
+    setUseLiveInterview(true);
+    setLiveKey(`live_${Date.now()}`);
     setScreen("interview");
-    setPhase("opening");
-    setPendingLabel(`主持人 ${INTERVIEW_MAGAZINE_HOST_NAME}`);
-    armResumeAction({ type: "opening", theme: trimmedTheme });
-
-    try {
-      const opening = await generateHostOpening(trimmedTheme, selectedCharacterIds, userIdentityId);
-      if (!isInterviewRunCurrent(runId)) return;
-      const initialMessages = [
-        makeInterviewMessage("host", opening.intro, { kind: "intro" }),
-        makeInterviewMessage("host", opening.question, {
-          kind: "question",
-          target: "character",
-          targetCharacterId: opening.targetCharacterId,
-          targetCharacterName: opening.targetCharacterName,
-        }),
-      ];
-      setMessages(initialMessages);
-      await runCharacterAnswer(opening.question, initialMessages, 1, opening.targetCharacterId, undefined, trimmedTheme, runId);
-    } catch (err) {
-      if (!isInterviewRunCurrent(runId)) return;
-      setError(err instanceof Error ? err.message : String(err));
-      setPhase("error");
-    } finally {
-      if (isInterviewRunCurrent(runId)) setPendingLabel("");
-    }
   };
-
   const runCharacterAnswer = async (
     question: string,
     baseMessages: InterviewMessage[],
@@ -448,6 +450,7 @@ export function InterviewMagazineApp({ onClose }: Props) {
       currentTheme: activeTheme,
     });
     const answer = await generateCharacterInterviewAnswer({
+      signal: legacyAbortRef.current?.signal,
       theme: activeTheme,
       characterIds: selectedCharacterIds,
       characterId: answeringCharacterId,
@@ -456,7 +459,6 @@ export function InterviewMagazineApp({ onClose }: Props) {
       transcript: baseMessages,
       round,
       lastUserAnswer,
-      // @ts-ignore - legacy signature missing phase
       phase: "嘉宾回答",
     });
     if (!isInterviewRunCurrent(runId)) return;
@@ -481,6 +483,7 @@ export function InterviewMagazineApp({ onClose }: Props) {
     setPendingLabel(`主持人 ${INTERVIEW_MAGAZINE_HOST_NAME}`);
     armResumeAction({ type: "hostToUser", baseMessages: withAnswer, currentTheme: activeTheme });
     const nextQuestion = await generateHostQuestion({
+      signal: legacyAbortRef.current?.signal,
       theme: activeTheme,
       characterIds: selectedCharacterIds,
       userIdentityId,
@@ -517,6 +520,7 @@ export function InterviewMagazineApp({ onClose }: Props) {
 
     try {
       const nextQuestion = await generateHostQuestion({
+      signal: legacyAbortRef.current?.signal,
         theme,
         characterIds: selectedCharacterIds,
         userIdentityId,
@@ -576,7 +580,7 @@ export function InterviewMagazineApp({ onClose }: Props) {
         setPhase("opening");
         setPendingLabel(`主持人 ${INTERVIEW_MAGAZINE_HOST_NAME}`);
         armResumeAction(action);
-        const opening = await generateHostOpening(action.theme, selectedCharacterIds, userIdentityId);
+        const opening = await generateHostOpening(action.theme, selectedCharacterIds, userIdentityId, { signal: legacyAbortRef.current?.signal });
         const initialMessages = [
           makeInterviewMessage("host", opening.intro, { kind: "intro" }),
           makeInterviewMessage("host", opening.question, {
@@ -610,6 +614,7 @@ export function InterviewMagazineApp({ onClose }: Props) {
         setPendingLabel(`主持人 ${INTERVIEW_MAGAZINE_HOST_NAME}`);
         armResumeAction(action);
         const nextQuestion = await generateHostQuestion({
+      signal: legacyAbortRef.current?.signal,
           theme: action.currentTheme,
           characterIds: selectedCharacterIds,
           userIdentityId,
@@ -629,6 +634,7 @@ export function InterviewMagazineApp({ onClose }: Props) {
       setPendingLabel(`主持人 ${INTERVIEW_MAGAZINE_HOST_NAME}`);
       armResumeAction(action);
       const nextQuestion = await generateHostQuestion({
+      signal: legacyAbortRef.current?.signal,
         theme: action.currentTheme,
         characterIds: selectedCharacterIds,
         userIdentityId,
@@ -662,20 +668,28 @@ export function InterviewMagazineApp({ onClose }: Props) {
     if (selectedCharacterIds.length === 0 || messages.length === 0) return;
     const composeRunId = composeRunRef.current + 1;
     composeRunRef.current = composeRunId;
+    const completedTranscript = messages.filter(message => message.content.trim());
+    const draftToDelete = useLiveInterview ? liveDraftId.current : activeDraftId;
+    composeAbortRef.current?.abort();
+    const composeAbort = new AbortController();
+    composeAbortRef.current = composeAbort;
     setScreen("generating");
     setError("");
     try {
       const issueNumber = getNextInterviewIssueNumber();
       const result = await composeInterviewArticle({
+        signal: composeAbort.signal,
+        options: useLiveInterview ? interviewOptions : undefined,
         theme,
         characterIds: selectedCharacterIds,
         userIdentityId,
-        transcript: messages,
+        transcript: completedTranscript,
         issueNumber,
       });
       if (composeRunRef.current !== composeRunId) return;
       const now = new Date().toISOString();
       const issue: InterviewIssue = {
+        options: useLiveInterview ? interviewOptions : undefined,
         id: `issue_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         issueNumber,
         theme,
@@ -689,32 +703,15 @@ export function InterviewMagazineApp({ onClose }: Props) {
         characterSnapshot: result.context.characterSnapshot,
         userSnapshot: result.context.userSnapshot,
         worldBookSnapshot: result.context.worldBookSnapshot,
-        transcript: messages,
+        transcript: completedTranscript,
         article: result.article,
         createdAt: now,
         updatedAt: now,
       };
       const savedIssues = saveInterviewIssue(issue);
-      recordInterviewMagazineProjectionEvent({
-        issueId: issue.id,
-        issueNumber,
-        title: issue.article.title,
-        theme,
-        characterIds: issue.characterIds || [issue.characterId],
-        characterNames: issue.characterNames || [issue.characterName],
-        userName: issue.userName,
-        summary: issue.article.memorySummary || issue.article.subtitle,
-        timestamp: now,
-      });
-      for (const guest of result.context.guests) {
-        incrementEventCounter(guest.character.id);
-        maybeRunSummarization(guest.character.id, guest.character.name).catch((summarizeError) => {
-          console.warn("[InterviewMagazine] Summarization check failed:", summarizeError);
-        });
-      }
       setIssues(savedIssues);
-      if (activeDraftId) {
-        setDrafts(deleteInterviewDraft(activeDraftId));
+      if (draftToDelete) {
+        setDrafts(deleteInterviewDraft(draftToDelete));
         setActiveDraftId(null);
       }
       clearResumeAction();
@@ -729,6 +726,7 @@ export function InterviewMagazineApp({ onClose }: Props) {
   };
 
   const cancelGenerating = () => {
+    composeAbortRef.current?.abort();
     composeRunRef.current += 1;
     setScreen("interview");
   };
@@ -763,6 +761,8 @@ export function InterviewMagazineApp({ onClose }: Props) {
             theme={theme}
             hostPrompt={hostPrompt}
             memoryPrompt={memoryPrompt}
+            options={interviewOptions}
+            onOptionsChange={setInterviewOptions}
             onThemeChange={setTheme}
             onCharacterToggle={toggleCharacter}
             onUserIdentityChange={setUserIdentityId}
@@ -770,6 +770,16 @@ export function InterviewMagazineApp({ onClose }: Props) {
             onMemoryPromptSave={(nextPrompt) => setMemoryPrompt(saveInterviewMemoryPrompt(nextPrompt))}
             onBack={() => setScreen("home")}
             onStart={startInterview}
+          />
+        ) : screen === "interview" && useLiveInterview ? (
+          <InterviewLiveSession key={liveKey} theme={theme} guests={activeCharacters.map(character => ({ id: character.id, name: character.name }))}
+            userIdentityId={userIdentityId} userName={userIdentities.find(identity => identity.id === userIdentityId)?.name || "我"}
+            initialOptions={interviewOptions} initialState={liveInitial} draftId={activeDraftId}
+            externalError={error}
+            onChange={(state, options) => { setMessages(state.messages); setCharacterRounds(state.round); setInterviewOptions(options); setError(""); }}
+            onDraftSaved={draft => { liveDraftId.current = draft.id; setActiveDraftId(draft.id); setDrafts(loadInterviewDrafts()); }}
+            onBack={() => { resetDraft(); setDrafts(loadInterviewDrafts()); setScreen("home"); }}
+            onCompose={(state, options) => { setLiveInitial(state); setInterviewOptions(options); void composeArticle(); }}
           />
         ) : screen === "interview" ? (
           <InterviewScreen
@@ -796,6 +806,7 @@ export function InterviewMagazineApp({ onClose }: Props) {
         ) : screen === "article" && activeIssue ? (
           <ArticleScreen
             issue={activeIssue}
+            onMemorySaved={issue => { setActiveIssue(issue); setIssues(loadInterviewIssues()); }}
             onBack={() => {
               setActiveIssue(null);
               resetDraft();
@@ -1050,6 +1061,8 @@ function SetupScreen({
   theme,
   hostPrompt,
   memoryPrompt,
+  options,
+  onOptionsChange,
   onThemeChange,
   onCharacterToggle,
   onUserIdentityChange,
@@ -1065,6 +1078,8 @@ function SetupScreen({
   theme: string;
   hostPrompt: string;
   memoryPrompt: string;
+  options: InterviewOptions;
+  onOptionsChange: (options: InterviewOptions) => void;
   onThemeChange: (value: string) => void;
   onCharacterToggle: (value: string) => void;
   onUserIdentityChange: (value: string) => void;
@@ -1094,6 +1109,7 @@ function SetupScreen({
       </header>
 
       <main className="interview-scroll px-5 py-6 flex flex-col gap-8">
+        <InterviewOptionsEditor options={options} onChange={onOptionsChange} />
         <section className="fade-in">
           <div className="flex items-center gap-3 mb-4">
             <span className="text-white/30 text-xs font-mono">01</span>
@@ -1450,9 +1466,11 @@ function GeneratingScreen({ onBack }: { onBack: () => void }) {
 function ArticleScreen({
   issue,
   onBack,
+  onMemorySaved,
 }: {
   issue: InterviewIssue;
   onBack: () => void;
+  onMemorySaved: (issue: InterviewIssue) => void;
 }) {
   const guestNames = getIssueGuestNames(issue);
   const guestLabel = guestNames.join("、") || issue.characterName;
@@ -1525,6 +1543,8 @@ function ArticleScreen({
               </div>
             </div>
           )}
+
+          <InterviewMemoryPanel key={issue.id} issue={issue} onSaved={onMemorySaved} />
 
           <div className="mt-16 pt-8 border-t border-white/5">
             <SmallCaps className="text-white/30 mb-4 block">TRANSCRIPT // 原始访谈实录</SmallCaps>

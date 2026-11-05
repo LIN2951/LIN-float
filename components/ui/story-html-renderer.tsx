@@ -6,6 +6,7 @@ import { LanguageIcon } from "@heroicons/react/24/solid";
 import { marked } from "marked";
 import { translateReasoningText } from "@/lib/reasoning-translate";
 import { CustomStatusFrame } from "@/components/chat/custom-status-frame";
+import { clearStoryDialogueDecoration, decorateStoryDialogue } from "@/lib/story-dialogue-decoration";
 
 export type StoryVoiceSegment = {
     id: string;
@@ -222,11 +223,13 @@ function MarkdownSegment({
     scopeClass,
     voiceIdPrefix,
     playingVoiceSegmentId,
+    colorDialogue = false,
 }: {
     content: string;
     scopeClass: string;
     voiceIdPrefix?: string;
     playingVoiceSegmentId?: string | null;
+    colorDialogue?: boolean;
 }) {
     const html = useMemo(() => {
         const voicePlaceholders: Array<{ token: string; html: string }> = [];
@@ -338,6 +341,11 @@ function MarkdownSegment({
     // 朗读高亮：直接改 DOM，播放状态变化不再重建整段 innerHTML；
     // 长正文连续朗读时避免反复重排导致页面卡死
     const rootRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!rootRef.current) return;
+        clearStoryDialogueDecoration(rootRef.current);
+        if (colorDialogue) decorateStoryDialogue(rootRef.current);
+    }, [html, colorDialogue]);
     useEffect(() => {
         const root = rootRef.current;
         if (!root) return;
@@ -583,9 +591,11 @@ export interface StoryHtmlRendererProps {
     playingVoiceSegmentId?: string | null;
     statusRenderHtml?: string;
     theaterRenderHtml?: string;
+    /** Free-layout dialogue colors; leave other consumers' markup unchanged. */
+    colorDialogue?: boolean;
 }
 
-function StoryHtmlRendererInner({ content, messageId, onOptionSelect, htmlPageMode = "auto", serifIframeFallback = false, onVoicePlay, playingVoiceSegmentId, statusRenderHtml, theaterRenderHtml }: StoryHtmlRendererProps) {
+function StoryHtmlRendererInner({ content, messageId, onOptionSelect, htmlPageMode = "auto", serifIframeFallback = false, onVoicePlay, playingVoiceSegmentId, statusRenderHtml, theaterRenderHtml, colorDialogue = false }: StoryHtmlRendererProps) {
     const segments = useMemo(() => splitContent(content), [content]);
     const scopeClass = `smsg-${messageId.slice(-8)}`;
     const containerRef = useRef<HTMLDivElement>(null);
@@ -622,16 +632,16 @@ function StoryHtmlRendererInner({ content, messageId, onOptionSelect, htmlPageMo
                                 if (innerSeg.type === "fold") {
                                     return (
                                         <StoryFoldBlock key={`fold-inner-${i}-${innerIndex}`} label={innerSeg.label} content={innerSeg.content} scopeClass={scopeClass}>
-                                            <MarkdownSegment content={innerSeg.content} scopeClass={scopeClass} voiceIdPrefix={voicePrefix(`fold:${i}:${innerIndex}`)} playingVoiceSegmentId={playingVoiceSegmentId} />
+                                            <MarkdownSegment content={innerSeg.content} scopeClass={scopeClass} voiceIdPrefix={voicePrefix(`fold:${i}:${innerIndex}`)} playingVoiceSegmentId={playingVoiceSegmentId} colorDialogue={colorDialogue} />
                                         </StoryFoldBlock>
                                     );
                                 }
-                                return <MarkdownSegment key={`fold-md-${i}-${innerIndex}`} content={innerSeg.content} scopeClass={scopeClass} voiceIdPrefix={voicePrefix(`fold:${i}:${innerIndex}`)} playingVoiceSegmentId={playingVoiceSegmentId} />;
+                                return <MarkdownSegment key={`fold-md-${i}-${innerIndex}`} content={innerSeg.content} scopeClass={scopeClass} voiceIdPrefix={voicePrefix(`fold:${i}:${innerIndex}`)} playingVoiceSegmentId={playingVoiceSegmentId} colorDialogue={colorDialogue} />;
                             })}
                         </StoryFoldBlock>
                     );
                 }
-                return <MarkdownSegment key={`md-${i}`} content={seg.content} scopeClass={scopeClass} voiceIdPrefix={voicePrefix(`md:${i}`)} playingVoiceSegmentId={playingVoiceSegmentId} />;
+                return <MarkdownSegment key={`md-${i}`} content={seg.content} scopeClass={scopeClass} voiceIdPrefix={voicePrefix(`md:${i}`)} playingVoiceSegmentId={playingVoiceSegmentId} colorDialogue={colorDialogue} />;
             })}
         </div>
     );

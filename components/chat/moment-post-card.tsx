@@ -32,6 +32,7 @@ type Props = {
     onRequestDelete?: (postId: string) => void;
     onOpenCommentComposer?: (post: MomentPost) => void;
     onOpenReplyComposer?: (post: MomentPost, comment: MomentComment, replyName: string) => void;
+    onOpenUserProfile?: (post: MomentPost) => void;
 };
 
 const DEFAULT_MOMENT_AVATAR_SRC = "/images/default-moment-avatar.png";
@@ -40,7 +41,7 @@ function MomentDefaultAvatar({ alt = "" }: { alt?: string }) {
     return <img src={DEFAULT_MOMENT_AVATAR_SRC} alt={alt} className="feed-default-avatar w-full h-full object-cover" />;
 }
 
-export function MomentPostCard({ post, onUpdate, onRequestDelete, onOpenCommentComposer, onOpenReplyComposer }: Props) {
+export function MomentPostCard({ post, onUpdate, onRequestDelete, onOpenCommentComposer, onOpenReplyComposer, onOpenUserProfile }: Props) {
     const [comments, setComments] = useState<MomentComment[]>(() => loadMomentComments(post.id));
     const [showPhotoPromptEditor, setShowPhotoPromptEditor] = useState(false);
     const [photoPromptDraft, setPhotoPromptDraft] = useState("");
@@ -330,6 +331,11 @@ export function MomentPostCard({ post, onUpdate, onRequestDelete, onOpenCommentC
             <div className="feed-post-header flex items-center gap-3 mb-3">
                 <div
                     className="feed-post-author-avatar w-[40px] h-[40px] rounded-full shrink-0 bg-[var(--c-input)] overflow-hidden flex items-center justify-center"
+                    role={post.authorType === "user" && onOpenUserProfile ? "button" : undefined}
+                    tabIndex={post.authorType === "user" && onOpenUserProfile ? 0 : undefined}
+                    aria-label={post.authorType === "user" && onOpenUserProfile ? "打开用户个人朋友圈" : undefined}
+                    onClick={() => { if (post.authorType === "user") onOpenUserProfile?.(post); }}
+                    onKeyDown={event => { if (post.authorType === "user" && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onOpenUserProfile?.(post); } }}
                 >
                     {authorAvatar ? (
                         <img src={authorAvatar} alt="" className="feed-post-author-avatar-image w-full h-full object-cover" />

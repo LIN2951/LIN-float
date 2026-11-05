@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type CSSProperties } from "react";
-import { BookOpen, Check, ChevronDown, Code2, FlaskConical, Loader2, RefreshCw, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Code2, FlaskConical, ImageIcon, Loader2, RefreshCw, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { CHAT_APP_SETTINGS_UPDATED_EVENT, loadChatAppSettings } from "@/lib/chat-storage";
 import {
     getFloatingDockState,
@@ -20,8 +20,13 @@ import {
     saveBindingConfig,
     saveApiConfigs,
     setCharacterBinding,
+    loadImageGenerationSettings,
+    saveImageGenerationSettings,
 } from "@/lib/settings-storage";
-import type { ApiConfig, BindingConfig, BindingSlot, WorldBookConfig } from "@/lib/settings-types";
+import type { ApiConfig, BindingConfig, BindingSlot, WorldBookConfig, ImageGenerationSettings } from "@/lib/settings-types";
+import { applyImageGenerationBinding, getActiveImageGenerationBindingId, getImageGenerationBindingOptions } from "@/lib/image-generation-binding";
+import { fetchImageGenerationModels, fetchNovelAiModels, filterLikelyImageModels, generateImageFromConfiguredApi } from "@/lib/image-generation-service";
+import { NOVELAI_COMMON_MODELS } from "@/lib/novelai-image-config";
 import { loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
 import { determineBaseUrl, simpleLLMCall } from "@/lib/api-helpers";
@@ -70,6 +75,12 @@ export function QuickActionFloat() {
     const [fetchedModels, setFetchedModels] = useState<Record<string, string[]>>({});
     const [modelBusy, setModelBusy] = useState<null | "fetch" | "test">(null);
     const [modelStatus, setModelStatus] = useState<{ success: boolean; message: string } | null>(null);
+    const [imageSettings, setImageSettings] = useState<ImageGenerationSettings>(loadImageGenerationSettings);
+    const [imageModels, setImageModels] = useState<Record<string, string[]>>({});
+    const [imageBusy, setImageBusy] = useState<null | "fetch" | "test">(null);
+    const imageBusyRef = useRef(false);
+    const [imageStatuses, setImageStatuses] = useState<Record<string, { success: boolean; message: string }>>({});
+    const [imagePreview, setImagePreview] = useState<{ key: string; url: string } | null>(null);
     const [floatingPosition, setFloatingPosition] = useState<FloatingPosition | null>(null);
     const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null);
     const [draggingFloatingButton, setDraggingFloatingButton] = useState(false);
@@ -92,6 +103,7 @@ export function QuickActionFloat() {
         const nextCharacters = loadCharacters();
         setConfig(loadBindingConfig());
         setApiConfigs(loadApiConfigs());
+        setImageSettings(loadImageGenerationSettings());
         setWorldBooks(loadWorldBooks());
         setCharacters(nextCharacters);
         setSelectedCharId(prev => {
@@ -123,9 +135,11 @@ export function QuickActionFloat() {
         const handleBindingsUpdated = () => reloadData();
         const handleFocus = () => reloadData();
         window.addEventListener("settings-bindings-updated", handleBindingsUpdated);
+        window.addEventListener("settings-image-generation-updated", handleBindingsUpdated);
         window.addEventListener("focus", handleFocus);
         return () => {
             window.removeEventListener("settings-bindings-updated", handleBindingsUpdated);
+            window.removeEventListener("settings-image-generation-updated", handleBindingsUpdated);
             window.removeEventListener("focus", handleFocus);
         };
     }, [enabled, reloadData]);
@@ -191,7 +205,7 @@ export function QuickActionFloat() {
                 });
         const width = Math.min(344, rect.width - 32);
         const statusSafeTop = getStatusSafeTop(layer);
-        const estimatedHeight = Math.min(520, Math.max(240, rect.height - statusSafeTop - 12));
+        const estimatedHeight = Math.min(560, Math.max(0, rect.height - statusSafeTop - 12));
         const left = posAnchor.left - width - 8;
         const top = posAnchor.top - estimatedHeight - 8;
         const maxTop = Math.max(statusSafeTop, rect.height - estimatedHeight - 12);
@@ -220,6 +234,19 @@ export function QuickActionFloat() {
     const activeApiConfigId = currentSlot.apiConfigId || (scope === "character" ? config.globalDefaults.apiConfigId : undefined);
     const activeApiConfig = apiConfigs.find(api => api.id === activeApiConfigId) || null;
     const activeFetchedModels = activeApiConfig ? (fetchedModels[activeApiConfig.id] || []) : [];
+    const imageOptions = useMemo(() => getImageGenerationBindingOptions(imageSettings), [imageSettings]);
+    const activeImageId = currentSlot.imageConfigId
+        || (scope === "character" ? config.globalDefaults.imageConfigId : undefined)
+        || getActiveImageGenerationBindingId(imageSettings) || "";
+    const activeImageSettings = useMemo(() => applyImageGenerationBinding(imageSettings, activeImageId), [imageSettings, activeImageId]);
+    const activeNaiPreset = activeImageSettings.novelai?.presets.find(preset => preset.id === activeImageSettings.novelai?.activePresetId);
+    const activeImageModel = activeImageSettings.provider === "novelai" ? activeNaiPreset?.model || "" : activeImageSettings.model;
+    const imageStatus = imageStatuses[activeImageId];
+    const availableImageModels = imageModels[activeImageId] || [];
+    const hasImageSelection = imageOptions.some(option => option.id === activeImageId);
+    const activeImageName = imageOptions.find(option => option.id === activeImageId)?.name || (activeImageId ? "已删除的预设，请重新选择" : "未设置");
+
+    useEffect(() => () => { if (imagePreview) URL.revokeObjectURL(imagePreview.url); }, [imagePreview]);
 
     const persistConfig = useCallback((next: BindingConfig) => {
         setConfig(next);
@@ -247,6 +274,65 @@ export function QuickActionFloat() {
         saveApiConfigs(next);
         setModelStatus({ success: true, message: `已选择模型：${model}` });
     }, [activeApiConfig, apiConfigs]);
+
+    const updateImageBinding = (imageConfigId?: string) => {
+        if (scope === "global") {
+            persistConfig({ ...config, globalDefaults: { ...config.globalDefaults, imageConfigId } });
+        } else if (selectedCharId) {
+            const binding = getCharacterBinding(config, selectedCharId);
+            persistConfig(setCharacterBinding(config, { ...binding, defaults: { ...binding.defaults, imageConfigId } }));
+        }
+    };
+
+    const updateImageModel = (model: string) => {
+        if (!hasImageSelection) return;
+        const latest = loadImageGenerationSettings();
+        const bound = applyImageGenerationBinding(latest, activeImageId);
+        const next = bound.provider === "novelai" && latest.novelai
+            ? { ...latest, novelai: { ...latest.novelai, presets: latest.novelai.presets.map(preset => `novelai:${preset.id}` === activeImageId ? { ...preset, model } : preset) } }
+            : { ...latest, openaiPresets: latest.openaiPresets?.map(preset => `openai:${preset.id}` === activeImageId ? { ...preset, model } : preset) };
+        saveImageGenerationSettings(next);
+        setImageSettings(loadImageGenerationSettings());
+        setImageStatuses(previous => {
+            const nextStatuses = { ...previous };
+            delete nextStatuses[activeImageId];
+            return nextStatuses;
+        });
+        setImagePreview(previous => previous?.key === activeImageId ? null : previous);
+    };
+
+    const runImageAction = async (action: "fetch" | "test") => {
+        if (!hasImageSelection || imageBusyRef.current) return;
+        const key = activeImageId;
+        const status = (success: boolean, message: string) => setImageStatuses(previous => ({ ...previous, [key]: { success, message } }));
+        imageBusyRef.current = true;
+        setImageBusy(action);
+        try {
+            if (action === "fetch") {
+                const nai = activeImageSettings.novelai;
+                const models = activeImageSettings.provider === "novelai"
+                    ? nai?.customUrlEnabled ? [...NOVELAI_COMMON_MODELS] : await fetchNovelAiModels(nai?.apiKey || "")
+                    : filterLikelyImageModels(await fetchImageGenerationModels(activeImageSettings));
+                setImageModels(previous => ({ ...previous, [key]: models }));
+                status(true, activeImageSettings.provider === "novelai"
+                    ? `已加载 ${models.length} 个常用模型${nai?.customUrlEnabled ? "，请确认中转站支持情况" : ""}`
+                    : `已拉取 ${models.length} 个模型`);
+            } else {
+                const result = await generateImageFromConfiguredApi({
+                    description: activeImageSettings.provider === "novelai"
+                        ? "white coffee cup on a wooden table, soft window light"
+                        : "一张放在木桌上的白色咖啡杯，柔和自然光，真实照片风格",
+                    settings: { ...activeImageSettings, enabled: true },
+                    useReferenceImage: false, includeUserReferenceImage: false,
+                });
+                if (!result) throw new Error("生图配置未启用或不完整");
+                setImagePreview({ key, url: URL.createObjectURL(result.blob) });
+                status(true, "测试生图成功");
+            }
+        } catch (error) {
+            status(false, `${action === "fetch" ? "拉取" : "测试"}失败：${error instanceof Error ? error.message : String(error)}`);
+        } finally { imageBusyRef.current = false; setImageBusy(null); }
+    };
 
     const fetchApiModels = useCallback(async () => {
         if (!activeApiConfig || modelBusy) return;
@@ -562,6 +648,7 @@ export function QuickActionFloat() {
                             <button
                                 type="button"
                                 data-active={scope === "global"}
+                                disabled={imageBusy !== null || modelBusy !== null}
                                 onClick={() => setScope("global")}
                             >
                                 全局
@@ -569,6 +656,7 @@ export function QuickActionFloat() {
                             <button
                                 type="button"
                                 data-active={scope === "character"}
+                                disabled={imageBusy !== null || modelBusy !== null}
                                 onClick={() => setScope("character")}
                             >
                                 角色
@@ -582,7 +670,7 @@ export function QuickActionFloat() {
                                     <select
                                         value={selectedCharId}
                                         onChange={event => setSelectedCharId(event.target.value)}
-                                        disabled={characters.length === 0}
+                                        disabled={characters.length === 0 || imageBusy !== null || modelBusy !== null}
                                     >
                                         {characters.length === 0 ? (
                                             <option value="">暂无角色</option>
@@ -597,16 +685,21 @@ export function QuickActionFloat() {
 
                         <section className="quick-action-section" data-disabled={characterDisabled ? "" : undefined}>
                             <div className="quick-action-section-heading">
-                                <span><Code2 size={16} />API</span>
+                                <span><Code2 size={16} />文字 API</span>
                                 {currentSlot.apiConfigId ? <small>{itemName(apiConfigs, currentSlot.apiConfigId)}</small> : <small>{scope === "global" ? "未设置" : "继承"}</small>}
                             </div>
+                            <details>
+                                <summary className="quick-action-option" aria-label="选择文字 API 预设" style={{ cursor: "pointer", listStyle: "none" }}>
+                                    <span>{activeApiConfig?.name || activeApiConfig?.defaultModel || inheritApiLabel}</span>
+                                    <ChevronDown size={15} />
+                                </summary>
                             <div className="quick-action-option-list">
                                 <button
                                     type="button"
                                     className="quick-action-option"
                                     data-selected={!currentSlot.apiConfigId}
-                                    disabled={characterDisabled}
-                                    onClick={() => updateApiConfig(undefined)}
+                                    disabled={characterDisabled || modelBusy !== null}
+                                    onClick={event => { updateApiConfig(undefined); event.currentTarget.closest("details")?.removeAttribute("open"); }}
                                 >
                                     <span>{inheritApiLabel}</span>
                                     {!currentSlot.apiConfigId ? <Check size={15} /> : null}
@@ -619,14 +712,15 @@ export function QuickActionFloat() {
                                         key={api.id}
                                         className="quick-action-option"
                                         data-selected={currentSlot.apiConfigId === api.id}
-                                        disabled={characterDisabled}
-                                        onClick={() => updateApiConfig(api.id)}
+                                        disabled={characterDisabled || modelBusy !== null}
+                                        onClick={event => { updateApiConfig(api.id); event.currentTarget.closest("details")?.removeAttribute("open"); }}
                                     >
                                         <span>{api.name || api.defaultModel || api.provider}</span>
                                         {currentSlot.apiConfigId === api.id ? <Check size={15} /> : null}
                                     </button>
                                 ))}
                             </div>
+                            </details>
                             <div className="quick-action-model-tools" data-disabled={!activeApiConfig ? "" : undefined}>
                                 <label className="quick-action-model-select">
                                     <span>模型</span>
@@ -664,6 +758,59 @@ export function QuickActionFloat() {
                                 {modelStatus ? (
                                     <p className="quick-action-model-status" data-success={modelStatus.success ? "" : undefined}>{modelStatus.message}</p>
                                 ) : null}
+                            </div>
+                        </section>
+
+                        <section className="quick-action-section" data-disabled={characterDisabled ? "" : undefined}>
+                            <div className="quick-action-section-heading">
+                                <span><ImageIcon size={16} />生图 API</span>
+                                <small>{currentSlot.imageConfigId ? "已绑定" : "继承默认"}</small>
+                            </div>
+                            <details>
+                                <summary className="quick-action-option" aria-label="选择生图 API 预设" style={{ cursor: "pointer", listStyle: "none" }}>
+                                    <span>{activeImageName}</span><ChevronDown size={15} />
+                                </summary>
+                                <div className="quick-action-option-list">
+                                    <button type="button" className="quick-action-option" data-selected={!currentSlot.imageConfigId}
+                                        disabled={characterDisabled || imageBusy !== null}
+                                        onClick={event => { updateImageBinding(); event.currentTarget.closest("details")?.removeAttribute("open"); }}>
+                                        <span>{scope === "global" ? "跟随生图设置" : "继承全局"}</span>{!currentSlot.imageConfigId && <Check size={15} />}
+                                    </button>
+                                    {imageOptions.length === 0 && <div className="quick-action-empty">请先在设置中添加生图 API 预设</div>}
+                                    {imageOptions.map(option => (
+                                        <button type="button" key={option.id} className="quick-action-option" data-selected={currentSlot.imageConfigId === option.id}
+                                            disabled={characterDisabled || imageBusy !== null}
+                                            onClick={event => { updateImageBinding(option.id); event.currentTarget.closest("details")?.removeAttribute("open"); }}>
+                                            <span>{option.name}</span>{currentSlot.imageConfigId === option.id && <Check size={15} />}
+                                        </button>
+                                    ))}
+                                </div>
+                            </details>
+                            <div className="quick-action-model-tools">
+                                <label className="quick-action-model-select">
+                                    <span>模型</span>
+                                    <div className="quick-action-select-shell">
+                                        <select aria-label="生图模型" value={activeImageModel} disabled={!hasImageSelection || characterDisabled || imageBusy !== null}
+                                            onChange={event => updateImageModel(event.target.value)}>
+                                            {!activeImageModel && <option value="">请选择模型</option>}
+                                            {activeImageModel && !availableImageModels.includes(activeImageModel) && <option value={activeImageModel}>{activeImageModel}</option>}
+                                            {availableImageModels.map(model => <option key={model} value={model}>{model}</option>)}
+                                        </select><ChevronDown size={15} />
+                                    </div>
+                                </label>
+                                <div className="quick-action-model-buttons">
+                                    <button type="button" disabled={!hasImageSelection || characterDisabled || imageBusy !== null} onClick={() => void runImageAction("fetch")}>
+                                        {imageBusy === "fetch" ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+                                        <span>{imageBusy === "fetch" ? "拉取中" : activeImageSettings.provider === "novelai" ? "加载模型" : "拉取模型"}</span>
+                                    </button>
+                                    <button type="button" disabled={!hasImageSelection || !activeImageModel || characterDisabled || imageBusy !== null} onClick={() => void runImageAction("test")}>
+                                        {imageBusy === "test" ? <Loader2 size={15} className="animate-spin" /> : <FlaskConical size={15} />}
+                                        <span>{imageBusy === "test" ? "测试中" : "测试生图"}</span>
+                                    </button>
+                                </div>
+                                <small>手动点击测试会生成一张图片并消耗 API 额度；模型修改会同步到该预设。</small>
+                                {imageStatus && <p className="quick-action-model-status" data-success={imageStatus.success ? "" : undefined}>{imageStatus.message}</p>}
+                                {imagePreview?.key === activeImageId && <img src={imagePreview.url} alt="生图 API 测试结果" style={{ width: "100%", maxHeight: 180, objectFit: "contain", borderRadius: 12 }} />}
                             </div>
                         </section>
 

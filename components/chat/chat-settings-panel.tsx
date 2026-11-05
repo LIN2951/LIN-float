@@ -61,6 +61,7 @@ import { ConfirmDialog } from "@/components/ui/modal";
 import { CHAT_SESSION_CSS_EXAMPLE } from "@/lib/css-examples";
 import { Toggle, Input } from "@/components/ui/form";
 import { PageShell } from "@/components/ui/page-shell";
+import { normalizeChineseThinkingPromptLength } from "@/lib/chinese-thinking-prompt";
 
 // 自定义状态栏预填模板：微博主页（契约=「状态栏」章节整段正文，含【逻辑】【格式】与包裹要求）
 // 预览用的默认示例数据：契约没有自带示例时兜底，字段与下面的微博模板对应
@@ -438,6 +439,9 @@ export function ChatSettingsPanel({
     const [discardInvalidStickers, setDiscardInvalidStickers] = useState(session.discardInvalidStickers === true);
     // 流式生成：按会话区分（线上/线下），存 ChatSession 字段，默认关
     const [streamOnline, setStreamOnline] = useState(session.streamOnline === true);
+    const [chineseThinkingPromptEnabled, setChineseThinkingPromptEnabled] = useState(session.chineseThinkingPromptEnabled === true);
+    const [chineseThinkingPromptLength, setChineseThinkingPromptLength] = useState(() => normalizeChineseThinkingPromptLength(session.chineseThinkingPromptLength));
+    const [showChineseThinkingSettings, setShowChineseThinkingSettings] = useState(false);
     const [streamOffline, setStreamOffline] = useState(session.streamOffline === true);
     const defaultBilingualPrompt = session.isGroup ? DEFAULT_GROUP_CHAT_BILINGUAL_PROMPT : DEFAULT_CHAT_BILINGUAL_PROMPT;
     const defaultOfflineBilingualPrompt = session.isGroup ? DEFAULT_GROUP_OFFLINE_CHAT_BILINGUAL_PROMPT : DEFAULT_OFFLINE_CHAT_BILINGUAL_PROMPT;
@@ -1459,7 +1463,7 @@ export function ChatSettingsPanel({
                             </div>
                         </div>
                         <div className="menu-item">
-                            <ChatInfoIcon icon={Sparkles} color={BINDING_ACCENTS.api} />
+                            <ChatInfoIcon icon={Sparkles} color={BINDING_ACCENTS.preset} />
                             <div className="menu-label-group">
                                 <span className="menu-label">线上流式生成</span>
                                 <span className="menu-desc">仅当前会话：线上 AI 回复边生成边显示；关闭则整段返回</span>
@@ -1598,6 +1602,22 @@ export function ChatSettingsPanel({
                 {/* Advanced */}
                 <div className="menu-group">
                     <KeyboardAutoSendDebounceItem sessionId={session.id} />
+                    <div className="menu-item">
+                        <ChatInfoIcon icon={Sparkles} color={BINDING_ACCENTS.api} />
+                        <div className="menu-label-group">
+                            <span className="menu-label">启用内置中文思考提示词</span>
+                            <span className="menu-desc">仅当前会话：线上回复加入中文角色独白，沿用现有思考区的字体与排版</span>
+                            <button type="button" className="mt-1 flex w-fit items-center gap-1 text-left ts-12 text-[var(--c-icon-active)]" onClick={() => setShowChineseThinkingSettings(true)}>
+                                详细设置 · 约 {chineseThinkingPromptLength} 字 <ChevronRight size={14} />
+                            </button>
+                        </div>
+                        <div className="menu-right">
+                            <Toggle checked={chineseThinkingPromptEnabled} onChange={checked => {
+                                setChineseThinkingPromptEnabled(checked);
+                                updateSession({ chineseThinkingPromptEnabled: checked });
+                            }} />
+                        </div>
+                    </div>
                     <button className="menu-item" onClick={() => setEditingCSS(true)}>
                         <ChatInfoIcon icon={Code} color={BINDING_ACCENTS.embedding} />
                         <div className="menu-label-group"><span className="menu-label">自定义 CSS 样式</span><span className="menu-desc">{customCSS ? "本会话覆盖全局" : "跟随全局聊天室 CSS"}</span></div>
@@ -1697,6 +1717,28 @@ export function ChatSettingsPanel({
                             ))}
                         </div>
                         <button className="ui-btn ui-btn-ghost w-full" onClick={() => setMemberActionKey(null)}>取消</button>
+                    </div>
+                </div>
+            )}
+
+            {showChineseThinkingSettings && (
+                <div className="modal-overlay" onClick={() => setShowChineseThinkingSettings(false)}>
+                    <div className="modal-dialog" role="dialog" aria-modal="true" aria-label="中文独白详细设置" onClick={event => event.stopPropagation()}>
+                        <span className="modal-header-title">中文独白详细设置</span>
+                        <p className="menu-desc">仅当前会话生效。开启中文思考提示词后，下次生成按所选篇幅创作；字数为大致目标。群聊按全部独白合计，显示沿用原有思考区。</p>
+                        <div className="flex w-full flex-col gap-2" role="radiogroup" aria-label="独白篇幅">
+                            {([100, 300, 500] as const).map(length => (
+                                <button key={length} type="button" role="radio" aria-checked={chineseThinkingPromptLength === length}
+                                    className={`ui-btn w-full ${chineseThinkingPromptLength === length ? "ui-btn-primary" : "ui-btn-ghost"}`}
+                                    onClick={() => {
+                                        setChineseThinkingPromptLength(length);
+                                        updateSession({ chineseThinkingPromptLength: length });
+                                    }}>
+                                    约 {length} 字
+                                </button>
+                            ))}
+                        </div>
+                        <button type="button" className="ui-btn ui-btn-ghost w-full" onClick={() => setShowChineseThinkingSettings(false)}>完成</button>
                     </div>
                 </div>
             )}

@@ -6,6 +6,8 @@
 @import "../styles/phone-shell.css";
 @import "../styles/widgets.css";
 @import "../styles/chat.css";
+@import "../styles/contact-profile.css";
+@import "../styles/memory-repair.css";
 @import "../styles/character.css";
 @import "../styles/animations.css";
 @import "../styles/music.css";
@@ -14,6 +16,7 @@
 @import "../styles/calendar.css";
 @import "../styles/diary.css";
 @import "../styles/story.css";
+@import "../styles/story-appearance.css";
 @import "../styles/vn.css";
 @import "../styles/dwelling.css";
 @import "../styles/checkphone.css";

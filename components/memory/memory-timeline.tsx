@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { NativeTimelineEntry } from "@/lib/short-term-assembler";
+import { getNativeTimelineEntryKey } from "@/lib/native-timeline-key";
 import { buildTwoLevelMomentThreads } from "@/lib/moments-comment-threading";
 import { findStickerByName } from "@/lib/sticker-data";
 import { getChatImageFromIndexedDB } from "@/lib/chat-asset-storage";
@@ -140,7 +141,7 @@ function parseEntry(evt: NativeTimelineEntry, userName: string): ParsedEntry | n
                 id: evt.id,
                 timestamp: evt.timestamp,
                 sender: m[1],
-                isUser: m[1] === userName,
+                isUser: evt.authorType ? evt.authorType === "user" : m[1] === userName,
                 message: inner ? inner[1] : raw,
                 innerMonologue: inner ? inner[2] : undefined,
             };
@@ -157,7 +158,7 @@ function parseEntry(evt: NativeTimelineEntry, userName: string): ParsedEntry | n
                 timestamp: evt.timestamp,
                 groupName: m[1],
                 sender: m[2],
-                isUser: m[2] === userName,
+                isUser: evt.authorType ? evt.authorType === "user" : m[2] === userName,
                 message: m[3],
             };
         }
@@ -645,7 +646,7 @@ export function MemoryTimeline({
     }, [events, activeTags]);
 
     const clusters = useMemo(() => {
-        const parsed = filteredEvents.map(e => parseEntry(e, userName)).filter((e): e is ParsedEntry => e !== null);
+        const parsed = filteredEvents.map(e => parseEntry({ ...e, id: getNativeTimelineEntryKey(e) }, userName)).filter((e): e is ParsedEntry => e !== null);
         return clusterByTimeGap(parsed);
     }, [filteredEvents, userName]);
 

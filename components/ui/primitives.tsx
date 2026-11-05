@@ -69,17 +69,21 @@ export function Avatar({
   src,
   name,
   size = "md",
+  cssSized = false,
 }: {
   src?: string;
   name: string;
   size?: "sm" | "md" | "lg";
+  /** Let the containing view control avatar size through its stylesheet. */
+  cssSized?: boolean;
 }) {
   const sizeMap = { sm: 28, md: 40, lg: 56 };
   const px = sizeMap[size];
   return (
     <div
       className="ui-avatar"
-      style={{ width: px, height: px, fontSize: px * 0.4 }}
+      data-avatar-size={cssSized ? size : undefined}
+      style={cssSized ? undefined : { width: px, height: px, fontSize: px * 0.4 }}
     >
       {src ? (
         <img src={src} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }} />

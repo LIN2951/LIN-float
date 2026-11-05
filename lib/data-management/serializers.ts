@@ -39,6 +39,12 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+/** A portable URL value; unlike Blob encoding, restores directly into img/audio src. */
+export async function serializeMediaUrl(blob: Blob, collector?: MediaCollector): Promise<unknown> {
+  if (!collector) return blobToDataUrl(blob);
+  return { [MEDIA_REF_MARKER]: true, mimeType: blob.type, ref: await collector.add(blob), encoding: "dataurl" } satisfies SerializedMediaRef;
+}
+
 function bytesToBlob(bytes: Uint8Array, mimeType: string): Blob {
   // Cast: TS 5.7 types Uint8Array as <ArrayBufferLike>, BlobPart wants <ArrayBuffer>.
   return new Blob([bytes as unknown as BlobPart], { type: mimeType || "application/octet-stream" });

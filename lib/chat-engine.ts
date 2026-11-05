@@ -38,6 +38,7 @@ import {
     resolveUserIdentity,
 } from "./settings-storage";
 import { resolveChatAccountUserIdentity } from "./chat-scope-storage";
+import { buildChineseThinkingPrompt, withChineseThinkingPrompt } from "./chinese-thinking-prompt";
 import { assemblePromptPayload, applyOutputRegex, type LLMMessage, type LLMContentPart } from "./llm-prompt-assembler";
 import { MacroEngine, postProcessTrim } from "./macro-engine";
 import { getStatusRegionConfig, resolveStatusRegionSection, resolveStatusRegionExampleLine, resolveStatusRegionComposition, resolveStatusRegionFullExample } from "./chat-status-region";
@@ -63,7 +64,7 @@ import { loadMemoryConfig, incrementEventCounter } from "./memory-storage";
 import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
 import { maybeRunSummarization } from "./memory-summarizer";
-import { prepareShortTermContext } from "./short-term-assembler";
+import { loadNativeTimelineAsync, prepareShortTermContext } from "./short-term-assembler";
 import { parseActionTags, dispatchActions } from "./action-parser";
 import { findEnabledToolForSchema, getEnabledTools, type EnabledTool } from "./tool-storage";
 import { formatToolsForPrompt, formatToolSchema } from "./tool-prompt";
@@ -1871,6 +1872,9 @@ export async function buildChatPromptMessages(
     if (preset && promptProfile) {
         preset = applyCustomPromptProfileToPreset(preset, promptProfile);
     }
+    const chineseThinkingEnabled = session.chineseThinkingPromptEnabled === true
+        && resolvedAppId === "chat" && !options?.appTags?.includes("offline") && !promptProfile;
+    preset = withChineseThinkingPrompt(preset, chineseThinkingEnabled);
 
     const allWorldBooks = loadWorldBooks();
     const extraWorldBookIds = options?.extraWorldBookIds ?? [];
@@ -1916,12 +1920,22 @@ export async function buildChatPromptMessages(
     const toolsEnabled = enabledTools.length > 0
         && (options?.forceEnableTools === true || presetIncludesToolsMacro(preset, resolvedAppId, effectiveAppTags));
     const usesNativeActions = Boolean(toolsEnabled && nativeToolProtocolForConfig(config));
+    const timeline = await loadNativeTimelineAsync(character.id, {
+        appId: resolvedAppId as import("./settings-types").ContentAppId,
+        userName: userIdentity?.name,
+        excludeOfflineSessionId: options?.excludeOfflineSessionId,
+        excludeChatSessionId: isOfflineMode ? undefined : session.id,
+        promptTimestampOptions,
+    });
     const { recentBlocks, truncatedHistory, wbActivationContext, unifiedRecentItems } = prepareShortTermContext(character.id, resolvedAppId, {
+        timeline,
         history: historyForPrompt,
         includeDirectChatEntries: isOfflineMode,
         includeNativeToolHistory: usesNativeActions,
         excludeOfflineSessionId: options?.excludeOfflineSessionId,
         chatAccountId: session.chatAccountId || null,
+        excludeChatSessionId: isOfflineMode ? undefined : session.id,
+        userName: userIdentity?.name,
         promptTimestampOptions,
     });
     const promptHistory = applyVisionImagePromptLimit(
@@ -2012,6 +2026,12 @@ export async function buildChatPromptMessages(
         offlineSummaryTag: preset?.story_summary_tag?.trim() || "summary",
         nativeToolHistory: usesNativeActions,
     });
+    if (chineseThinkingEnabled) {
+        llmMessages.push({ role: "system", content: buildChineseThinkingPrompt(
+            userIdentity?.name || "你", preset?.online_thinking_tag?.trim() || "thinking", [character.name],
+            session.chineseThinkingPromptLength,
+        ) });
+    }
     const avatarChangeIntent = !session.isGroup
         ? findUserAvatarChangeIntent(historyForPrompt, session.id, character.id)
         : null;

@@ -1,3 +1,5 @@
+import type { FaceCrop } from "./face-crop";
+
 export type SettingItemMeta = {
     id: string;
     name: string;
@@ -266,12 +268,8 @@ export type ImageGenerationSettings = {
         enabled?: boolean;
         /** 开启时，仅自拍语义的图片使用参考图，默认开启。 */
         selfieOnly?: boolean;
-        /** 归一化的正方形脸部选区。 */
-        faceCrop?: {
-            x: number;
-            y: number;
-            size: number;
-        };
+        /** 可独立调整宽高的脸部选区，兼容旧正方形数据。 */
+        faceCrop?: FaceCrop;
         /** 该角色的服装、配饰与稳定特征锚点。 */
         anchors?: Array<{
             id: string;
@@ -288,11 +286,7 @@ export type ImageGenerationSettings = {
         assetId?: string;
         updatedAt: number;
         enabled?: boolean;
-        faceCrop?: {
-            x: number;
-            y: number;
-            size: number;
-        };
+        faceCrop?: FaceCrop;
     }>;
     imageHosting: ImageHostingSettings;
 };

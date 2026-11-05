@@ -14,12 +14,12 @@ import { extractCssImports, scopeSessionCSS } from "@/lib/css-scoper";
  * <link> 带 precedence 属性由 React 19 提升进 <head> 并按 href 去重，跨重渲染
  * 保持稳定；字体加载失败只缺字体，不影响其余自定义样式。
  */
-export function SessionCustomCSS({ css, scope }: { css: string; scope: string }) {
+export function SessionCustomCSS({ css, scope, priority = false }: { css: string; scope: string; priority?: boolean }) {
     const { imports, body } = useMemo(() => {
         const extracted = extractCssImports(css || "");
         return { imports: extracted.imports, body: extracted.css };
     }, [css]);
-    const scoped = useMemo(() => scopeSessionCSS(body, scope), [body, scope]);
+    const scoped = useMemo(() => scopeSessionCSS(body, scope, priority), [body, scope, priority]);
 
     return (
         <>
