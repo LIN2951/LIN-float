@@ -228,6 +228,39 @@ export function saveMusicFloatVisibility(v: MusicFloatVisibility): void {
     window.dispatchEvent(new CustomEvent(MUSIC_FLOAT_VISIBILITY_EVENT));
 }
 
+// ── Music theme (dark / light) ──
+
+export type MusicTheme = "dark" | "light";
+
+const MUSIC_THEME_KEY = "music-theme-v1";
+registerKvMigration(MUSIC_THEME_KEY);
+
+export const MUSIC_THEME_EVENT = "music-theme-change";
+
+export const DEFAULT_MUSIC_THEME: MusicTheme = "dark";
+
+export function loadMusicTheme(): MusicTheme {
+    if (typeof window === "undefined") return DEFAULT_MUSIC_THEME;
+    try {
+        const raw = kvGet(MUSIC_THEME_KEY);
+        return raw === "light" ? "light" : "dark";
+    } catch {
+        return DEFAULT_MUSIC_THEME;
+    }
+}
+
+/** Apply the theme globally so both the app pages and the full player react. */
+export function applyMusicTheme(theme: MusicTheme): void {
+    if (typeof document === "undefined") return;
+    document.documentElement.dataset.musicTheme = theme;
+}
+
+export function saveMusicTheme(theme: MusicTheme): void {
+    try { kvSet(MUSIC_THEME_KEY, theme); } catch { /* ignore */ }
+    applyMusicTheme(theme);
+    window.dispatchEvent(new CustomEvent(MUSIC_THEME_EVENT));
+}
+
 /** Background style for app pages (home / playlists / mine), or undefined for default. */
 export function appBgStyle(cfg: MusicBgConfig): BgInlineStyle | undefined {
     if (!cfg.image) return undefined;

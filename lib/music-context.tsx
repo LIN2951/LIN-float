@@ -8,6 +8,7 @@ import { findPlayableMatch, getNeteaseLyrics, getNeteasePlayUrl, getNeteasePlayI
 import { getFreePlayUrl } from "./music-free-source";
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { registerMusicControlBridge } from "./music-control-bridge";
+import { applyMusicTheme, loadMusicTheme, MUSIC_THEME_EVENT } from "./music-bg";
 import { ytEngine } from "./youtube-engine";
 
 /** Fired when an external link track has no playable source. */
@@ -37,6 +38,8 @@ export type MusicActions = {
     togglePlay: () => void;
     next: () => void;
     prev: () => void;
+    /** Always jump to the previous track (never restarts the current song). */
+    prevTrack: () => void;
     seek: (time: number) => void;
     setPlayMode: (mode: PlayMode) => void;
     setQueue: (tracks: MusicTrack[]) => void;
@@ -118,6 +121,14 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const [volume, setVolumeState] = useState(0.8);
     const [showFullPlayer, setShowFullPlayer] = useState(false);
     const [floatDismissed, setFloatDismissed] = useState(false);
+
+    // Apply the persisted music theme (dark / light) globally on mount.
+    useEffect(() => {
+        applyMusicTheme(loadMusicTheme());
+        const onChange = () => applyMusicTheme(loadMusicTheme());
+        window.addEventListener(MUSIC_THEME_EVENT, onChange);
+        return () => window.removeEventListener(MUSIC_THEME_EVENT, onChange);
+    }, []);
 
     // Persist queue on change.
     useEffect(() => {
@@ -446,6 +457,16 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         loadAndPlay(queue[prevIdx]);
     }, [queue, currentTrack, currentTime, playMode, loadAndPlay, seek]);
 
+    // Always switch to the previous track, regardless of playback position.
+    const prevTrack = useCallback(() => {
+        if (queue.length === 0 || !currentTrack) return;
+        const idx = queue.findIndex(t => t.id === currentTrack.id);
+        const prevIdx = playMode === "shuffle"
+            ? Math.floor(Math.random() * queue.length)
+            : (idx - 1 + queue.length) % queue.length;
+        loadAndPlay(queue[prevIdx]);
+    }, [queue, currentTrack, playMode, loadAndPlay]);
+
     const setVolume = useCallback((vol: number) => {
         const clamped = Math.max(0, Math.min(1, vol));
         setVolumeState(clamped);
@@ -612,22 +633,23 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             stop,
             next,
             prev,
+            prevTrack,
             setPlayMode,
         });
         return () => registerMusicControlBridge(null);
     }, [
         currentTrack, isPlaying, currentTime, duration, playMode, queue, volume,
-        playResolvedTrack, playByQuery, addToQueue, pause, resume, stop, next, prev, setPlayMode,
+        playResolvedTrack, playByQuery, addToQueue, pause, resume, stop, next, prev, prevTrack, setPlayMode,
     ]);
 
     const controlsValue = useMemo<MusicControlsValue>(() => ({
         currentTrack, isPlaying, duration, playMode, queue, volume, showFullPlayer, floatDismissed,
-        playTrack, playUrl, pause, resume, togglePlay, next, prev, seek,
+        playTrack, playUrl, pause, resume, togglePlay, next, prev, prevTrack, seek,
         setPlayMode, setQueue, removeFromQueue, setVolume, stop, dismissFloat, openFullPlayer, closeFullPlayer,
         patchTrack,
     }), [
         currentTrack, isPlaying, duration, playMode, queue, volume, showFullPlayer, floatDismissed,
-        playTrack, playUrl, pause, resume, togglePlay, next, prev, seek,
+        playTrack, playUrl, pause, resume, togglePlay, next, prev, prevTrack, seek,
         setQueue, removeFromQueue, setVolume, stop, dismissFloat, openFullPlayer, closeFullPlayer,
         patchTrack,
     ]);

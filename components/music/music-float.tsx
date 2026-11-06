@@ -363,7 +363,7 @@ function MusicFloatIsland({
         if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
         if (actionTimerRef.current) clearTimeout(actionTimerRef.current);
         actionTimerRef.current = setTimeout(() => {
-            if (dir === "prev") player.prev();
+            if (dir === "prev") player.prevTrack();
             else player.next();
             actionTimerRef.current = null;
         }, 140);

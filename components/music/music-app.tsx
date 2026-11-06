@@ -35,6 +35,7 @@ import {
     loadMusicFloatSizes, saveMusicFloatSizes, normalizeMusicFloatSizes,
     MUSIC_FLOAT_SIZE_LIMITS, type MusicFloatSizes,
     loadMusicFloatVisibility, saveMusicFloatVisibility, type MusicFloatVisibility,
+    loadMusicTheme, saveMusicTheme, applyMusicTheme, type MusicTheme,
 } from "@/lib/music-bg";
 
 type Props = { onClose: () => void };
@@ -77,7 +78,12 @@ export default function MusicApp({ onClose }: Props) {
     const musicToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const musicLoadingFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [bgCfg, setBgCfg] = useState<MusicBgConfig>(() => loadMusicBg());
+    const [theme, setTheme] = useState<MusicTheme>(() => loadMusicTheme());
     const player = useMusicControls();
+
+    useEffect(() => {
+        applyMusicTheme(theme);
+    }, [theme]);
 
     useEffect(() => {
         const handleBgChange = () => setBgCfg(loadMusicBg());
@@ -344,6 +350,26 @@ export default function MusicApp({ onClose }: Props) {
                     {dailyView ? "每日推荐" : activePlaylist && tab === "recommend" ? "歌单详情" : tab === "recommend" ? "" : tab === "search" ? "搜索" : tab === "mine" ? "我的" : "本地音乐"}
                 </div>
                 <div className="music-header-right">
+                    <button
+                        className="music-header-action"
+                        onClick={() => {
+                            const next: MusicTheme = theme === "light" ? "dark" : "light";
+                            setTheme(next);
+                            saveMusicTheme(next);
+                        }}
+                        title={theme === "light" ? "切换到夜间模式" : "切换到日间模式"}
+                    >
+                        {theme === "light" ? (
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 12.8a9 9 0 1 1-9.8-9.8 7 7 0 0 0 9.8 9.8z" />
+                            </svg>
+                        ) : (
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="4.2" />
+                                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+                            </svg>
+                        )}
+                    </button>
                     <button className="music-header-action" onClick={() => setShowOtomePlayer(true)} title="乙女抓播放器">
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
@@ -1949,7 +1975,7 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                             <input
                                 type="range"
                                 className="music-bg-range"
-                                min={20}
+                                min={0}
                                 max={85}
                                 value={bg.dim}
                                 onChange={e => applyBg({ ...bg, dim: parseInt(e.target.value, 10) })}
@@ -2001,7 +2027,7 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                                     <input
                                         type="range"
                                         className="music-bg-range"
-                                        min={20}
+                                        min={0}
                                         max={85}
                                         value={bg.playerDim}
                                         onChange={e => applyBg({ ...bg, playerDim: parseInt(e.target.value, 10) })}

@@ -115,6 +115,8 @@
   --c-music-liked: #ff5468;
   /* 已点赞红心 */
 
+  /* ── 音乐色 · 日间（白色系） · 由 html[data-music-theme="light"] 激活 ── */
+
   /* ── 日历色（v2 · 黑白灰色块 + 糖果事件色，默认 = light 主题） ── */
   --c-calendar-bg: #FFFFFF;
   /* 页面底色 */
@@ -241,6 +243,35 @@
   --ease-elastic: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-breathe: cubic-bezier(0.45, 0, 0.55, 1);
 }
+
+/* ═══════════════════════════════════════════
+   音乐 · 日间（白色系）覆盖
+   由 <html data-music-theme="light"> 激活，只影响音乐相关组件
+   （App 页面与全屏播放器均使用 var(--c-music-*)）
+   ═══════════════════════════════════════════ */
+html[data-music-theme="light"] {
+  --c-music-bg: #f3f4f7;
+  --c-music-bg-mint: rgba(120, 140, 170, 0.10);
+  --c-music-bg-cream: rgba(170, 160, 140, 0.08);
+  --c-music-bg-lime: rgba(130, 160, 130, 0.07);
+  --c-music-bg-mint-dim: rgba(120, 140, 170, 0.06);
+  --c-music-bg-center: rgba(232, 234, 240, 0.85);
+  --c-music-bg-glow: rgba(120, 150, 220, 0.10);
+  --c-music-bg-mist: rgba(110, 140, 200, 0.07);
+  --c-music-surface: rgba(0, 0, 0, 0.045);
+  --c-music-surface-solid: rgba(0, 0, 0, 0.08);
+  --c-music-panel: rgba(255, 255, 255, 0.97);
+  --c-music-glass-dim: rgba(0, 0, 0, 0.06);
+  --c-music-text: #1c1c1e;
+  --c-music-accent: #5c6b82;
+  --c-music-accent-dim: rgba(90, 110, 150, 0.12);
+  --c-music-primary: #ff5468;
+  --c-music-primary-dim: rgba(255, 84, 104, 0.12);
+  --c-music-glowtext: #2a3340;
+  --c-music-gold: rgba(90, 110, 150, 0.35);
+  --c-music-liked: #ff5468;
+}
+
 
 /* ═══════════════════════════════════════════
    聊天 App 独立色板 (.chat-app)

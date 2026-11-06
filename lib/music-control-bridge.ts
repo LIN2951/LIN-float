@@ -21,6 +21,8 @@ export type MusicControlBridge = {
     stop: () => void;
     next: () => void;
     prev: () => void;
+    /** Always jump to the previous track (used by the dynamic island swipe). */
+    prevTrack: () => void;
     setPlayMode: (mode: PlayMode) => void;
 };
 
