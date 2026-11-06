@@ -521,7 +521,7 @@ function MusicFloatIsland({
 
                             <div className="music-dynamic-island-controls">
                                 <DesktopLyricsButton active={lyricsVisible} onClick={onToggleLyrics} />
-                                <button className="music-float-icon-btn" onClick={(e) => { e.stopPropagation(); player.prev(); }} title="上一首">
+                                <button className="music-float-icon-btn" onClick={(e) => { e.stopPropagation(); player.prevTrack(); }} title="上一首">
                                     <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
                                 </button>
                                 <button className="music-float-icon-btn music-float-ctrl-play" onClick={(e) => { e.stopPropagation(); player.togglePlay(); }} title={player.isPlaying ? "暂停" : "播放"}>

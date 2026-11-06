@@ -109,6 +109,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const activeEngineRef = useRef<"audio" | "yt">("audio");
     const isPlayingRef = useRef(false);
     const currentTrackRef = useRef<MusicTrack | null>(null);
+    const currentTimeRef = useRef(0);
+    const durationRef = useRef(0);
     const fallbackTriedRef = useRef(false);
     const handleTrackEndRef = useRef<() => void>(() => {});
 
@@ -213,6 +215,88 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     // Keep refs mirrored for use inside engine/audio callbacks.
     useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
     useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
+    useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
+    useEffect(() => { durationRef.current = duration; }, [duration]);
+
+    // ── Media Session：把播放信息同步到真实手机的状态栏/锁屏媒体卡片 ──
+    // 卡片上的播放/暂停/上一首/下一首/拖动进度都会路由回这里的播放器，
+    // 效果与网易云音乐等原生 App 一致（Chrome/Edge + 安卓 PWA 均支持）。
+    const mediaActionsRef = useRef<{
+        resume: () => void; pause: () => void; next: () => void; prevTrack: () => void; seek: (t: number) => void;
+    }>({ resume: () => {}, pause: () => {}, next: () => {}, prevTrack: () => {}, seek: () => {} });
+
+    useEffect(() => {
+        if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+        const ms = navigator.mediaSession;
+        const bind = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+            try { ms.setActionHandler(action, handler); } catch { /* 个别 action 某些平台不支持 */ }
+        };
+        bind("play", () => mediaActionsRef.current.resume());
+        bind("pause", () => mediaActionsRef.current.pause());
+        bind("nexttrack", () => mediaActionsRef.current.next());
+        bind("previoustrack", () => mediaActionsRef.current.prevTrack());
+        bind("seekto", (details) => {
+            if (typeof details.seekTime === "number" && Number.isFinite(details.seekTime)) {
+                mediaActionsRef.current.seek(details.seekTime);
+            }
+        });
+        bind("seekbackward", (details) => {
+            const offset = details.seekOffset ?? 10;
+            mediaActionsRef.current.seek(Math.max(0, currentTimeRef.current - offset));
+        });
+        bind("seekforward", (details) => {
+            const offset = details.seekOffset ?? 10;
+            const max = durationRef.current > 0 ? durationRef.current : Number.MAX_SAFE_INTEGER;
+            mediaActionsRef.current.seek(Math.min(max, currentTimeRef.current + offset));
+        });
+        return () => {
+            bind("play", null);
+            bind("pause", null);
+            bind("nexttrack", null);
+            bind("previoustrack", null);
+            bind("seekto", null);
+            bind("seekbackward", null);
+            bind("seekforward", null);
+        };
+    }, []);
+
+    // 同步系统媒体卡片的标题/歌手/封面与播放状态
+    useEffect(() => {
+        if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+        const ms = navigator.mediaSession;
+        if (!currentTrack) {
+            try { ms.metadata = null; } catch { /* ignore */ }
+            try { ms.playbackState = "none"; } catch { /* ignore */ }
+            return;
+        }
+        try {
+            ms.metadata = new MediaMetadata({
+                title: currentTrack.title || "未知歌曲",
+                artist: currentTrack.artist || "未知歌手",
+                album: "Float 音乐",
+                artwork: currentTrack.coverUrl
+                    ? [{ src: currentTrack.coverUrl, sizes: "512x512" }]
+                    : [],
+            });
+        } catch { /* ignore */ }
+        try { ms.playbackState = isPlaying ? "playing" : "paused"; } catch { /* ignore */ }
+    }, [currentTrack, isPlaying]);
+
+    // 同步系统媒体卡片的进度条（支持系统侧拖进度）
+    useEffect(() => {
+        if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+        const ms = navigator.mediaSession;
+        if (typeof ms.setPositionState !== "function") return;
+        if (!currentTrack || !Number.isFinite(duration) || duration <= 0) return;
+        try {
+            ms.setPositionState({
+                duration,
+                playbackRate: 1,
+                position: Math.max(0, Math.min(currentTime, duration)),
+            });
+        } catch { /* position 超出范围等平台差异，忽略 */ }
+    }, [currentTrack, currentTime, duration]);
+
 
     const handleTrackEnd = useCallback(() => {
         setCurrentTrack(prev => {
@@ -466,6 +550,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             : (idx - 1 + queue.length) % queue.length;
         loadAndPlay(queue[prevIdx]);
     }, [queue, currentTrack, playMode, loadAndPlay]);
+
+    // 让系统媒体卡片（通知栏/锁屏）的按钮始终调用最新的播放控制
+    useEffect(() => {
+        mediaActionsRef.current = { resume, pause, next, prevTrack, seek };
+    }, [resume, pause, next, prevTrack, seek]);
 
     const setVolume = useCallback((vol: number) => {
         const clamped = Math.max(0, Math.min(1, vol));

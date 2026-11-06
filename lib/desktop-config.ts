@@ -31,7 +31,8 @@ export type IconId =
   | "worldbuilder"
   | "realitybridge"
   | "qa"
-  | "mixology";
+  | "mixology"
+  | "watch";
 
 // 桌面文件夹：以 folder: 前缀的 id 伪装成图标占一个格子参与拖拽/换页，
 // 内容（名字 + 成员图标）另存 DesktopFolderMap。文件夹不允许进 dock。
@@ -67,7 +68,8 @@ export const PAGE_2_DEFAULT: IconId[] = [
   "dwelling",
   "story",
   "vnmode",
-  "mapmode"
+  "mapmode",
+  "watch"
 ];
 
 // 第三页默认图标：右半边 2×2 排布（左半边留给日历组件），位置见 createDefaultDesktopIconLayout
@@ -80,6 +82,7 @@ export const ICONS: Record<IconId, IconMeta> = {
   favorites: { id: "favorites", label: "收藏", tone: "var(--c-icon-amber)", placeholder: false },
   diary: { id: "diary", label: "手记", tone: "var(--c-icon-violet)", placeholder: false },
   music: { id: "music", label: "\u97F3\u4E50", tone: "var(--c-icon-coral)", placeholder: false },
+  watch: { id: "watch", label: "一起看", tone: "#6f9dff", placeholder: false },
   drama: { id: "drama", label: "\u5E7F\u64AD\u5267", tone: "#e682b4", placeholder: false },
   reading: { id: "reading", label: "\u9605\u8BFB", tone: "var(--c-icon-amber)", placeholder: false },
   cocreate: { id: "cocreate", label: "共创", tone: "var(--c-icon-cocreate, #c8b58a)", placeholder: false },

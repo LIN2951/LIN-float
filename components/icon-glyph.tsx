@@ -41,6 +41,7 @@ import {
   mdiGlassCocktail,
   mdiStorefrontOutline,
   mdiHeadphones,
+  mdiTelevisionPlay,
 } from "@mdi/js";
 
 type IconGlyphProps = {
@@ -54,6 +55,7 @@ const MDI_PATHS: Record<IconId, string> = {
   favorites: mdiBookmark,
   diary: mdiBookOpenPageVariant,
   music: mdiMusic,
+  watch: mdiTelevisionPlay,
   drama: mdiHeadphones,
   reading: mdiBookOpenVariant,
   cocreate: mdiFeather,

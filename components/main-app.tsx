@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight } from "lucide-react";
 
 import { AccountGate } from "@/components/auth/account-gate";
 import { CloudBackupScheduler } from "@/components/cloud-backup-scheduler";
@@ -9,9 +8,10 @@ import { RealityBridgeScheduler } from "@/components/reality-bridge-scheduler";
 import { MediaMaintenanceScheduler } from "@/components/media-maintenance-scheduler";
 import { DesktopShell } from "./desktop-shell";
 import { OfflinePushRevampAnnouncement } from "./offline-push-revamp-announcement";
-import { SplashAnimation } from "./splash-animation";
+import { LockScreen } from "./lock-screen";
 import { MusicProvider } from "@/lib/music-context";
 import { hydrateKvDb, isKvHydrated } from "@/lib/kv-db";
+import { loadLockScreenSettings } from "@/lib/lockscreen-settings";
 import { getThemeAssetMap, readThemeProfile } from "@/lib/theme-storage";
 import { resolveActiveIconSkins, type ThemeProfile } from "@/lib/theme-types";
 import { hasPendingMcpOAuthCallback } from "@/lib/tool-executor";
@@ -159,16 +159,7 @@ function SplashScreen({ ready = false, onEnter }: { ready?: boolean; onEnter?: (
         <div className="phone-case">
           <div className="phone-frame">
             <div className="phone-shell splash-phone-screen">
-              <SplashAnimation />
-              <button
-                type="button"
-                className={ready ? "splash-enter-button splash-enter-button-show" : "splash-enter-button"}
-                onClick={onEnter}
-                disabled={!ready}
-                aria-label="Enter"
-              >
-                <ArrowRight size={18} strokeWidth={1.8} />
-              </button>
+              <LockScreen ready={ready} onEnter={onEnter} />
             </div>
           </div>
         </div>
@@ -261,7 +252,10 @@ export function MainApp() {
       if (cancelled) return;
       setPreparedDesktopTheme(nextPreparedTheme);
       setHydrated(true);
-      if (hasPendingMcpOAuthCallback()) {
+      // 外观设置里选择「隐藏锁屏」时，开机跳过锁屏直接进桌面。
+      if (loadLockScreenSettings().hidden) {
+        setSplashDismissed(true);
+      } else if (hasPendingMcpOAuthCallback()) {
         setSplashDismissed(true);
       }
     })();

@@ -14,6 +14,7 @@ import { PhoneChatApp } from "@/components/chat/phone-chat-app";
 import { FavoritesApp } from "@/components/favorites/favorites-app";
 import { PhonePlaceholderApp } from "@/components/phone-placeholder-app";
 import MusicApp from "@/components/music/music-app";
+import WatchApp from "@/components/watch/watch-app";
 import MusicPlayer from "@/components/music/music-player";
 import MusicFloat from "@/components/music/music-float";
 import OtomeVideoOverlay from "@/components/music/otome-video-overlay";
@@ -129,7 +130,7 @@ import { WidgetRenderer } from "@/components/widgets/widget-renderer";
 import type { DIYWidgetTemplate } from "@/lib/widget-types";
 import { DebugPromptPanel } from "@/components/debug-prompt-panel";
 import { QuickActionFloat } from "@/components/quick-action-float";
-import { CHAT_MESSAGE_PUSHED_EVENT, CHAT_REQUEST_REPLY_EVENT, findChatSessionById, hydrateChatStorage, loadChatSessions, loadChatMessages, pushChatMessage, type ChatMessage, type ChatSession } from "@/lib/chat-storage";
+import { CHAT_MESSAGE_PUSHED_EVENT, CHAT_REQUEST_REPLY_EVENT, findChatSessionById, hydrateChatStorage, loadChatSessions, loadChatMessages, loadChatAppSettings, pushChatMessage, type ChatMessage, type ChatSession } from "@/lib/chat-storage";
 import { ensureGlobalBindingDefaults, resolveUserIdentity } from "@/lib/settings-storage";
 import { loadCharacters } from "@/lib/character-storage";
 import { generateChatCompletion, flattenCompletionResult } from "@/lib/chat-engine";
@@ -143,7 +144,7 @@ import { DESKTOP_WIDGETS_CHANGED_EVENT } from "@/lib/mascot-events";
 import { useWeixinBridge } from "@/lib/use-weixin-bridge";
 import { startWeixinCloudRealtimeSync } from "@/lib/weixin-cloud-sync";
 import { WeixinSyncToast } from "@/components/weixin-sync-toast";
-import { sendBrowserNotification } from "@/lib/browser-notification";
+import { requestNotificationPermission, sendBrowserNotification } from "@/lib/browser-notification";
 import type { ChatSharePayload } from "@/lib/chat-share";
 import { completePendingMcpOAuthCallback } from "@/lib/tool-executor";
 import { LayoutGrid, LoaderCircle, RefreshCw } from "lucide-react";
@@ -1039,7 +1040,7 @@ const MusicShellOverlays = memo(function MusicShellOverlays({
   return (
     <>
       {musicPlayer?.showFullPlayer && musicPlayer.currentTrack && <MusicPlayer />}
-      <MusicFloat hidden={activeApp === "music" || activeApp === "drama" || musicPlayer?.showFullPlayer} />
+      <MusicFloat hidden={activeApp === "music" || activeApp === "drama" || activeApp === "watch" || musicPlayer?.showFullPlayer} />
       <OtomeVideoOverlay />
     </>
   );
@@ -1106,6 +1107,25 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
   }, [incomingCall]);
   // 全局聊天提示音（新消息/发送消息）：监听消息落库事件，按各会话配置播放（角色专属优先于全局）
   useEffect(() => installChatSoundListener(), []);
+  // 后台系统通知：用户已在聊天设置里打开「浏览器通知」但还没授权时，
+  // 借第一次点击手势顺手申请权限（浏览器规定必须跟随用户操作）。
+  // 授权后即使切出本应用（页面隐藏），角色的新消息也会弹到真实手机顶部通知栏。
+  useEffect(() => {
+    const handler = () => {
+      try {
+        if (
+          loadChatAppSettings().browserNotificationsEnabled === true
+          && typeof window !== "undefined"
+          && "Notification" in window
+          && Notification.permission === "default"
+        ) {
+          void requestNotificationPermission();
+        }
+      } catch { /* ignore */ }
+    };
+    window.addEventListener("pointerdown", handler);
+    return () => window.removeEventListener("pointerdown", handler);
+  }, []);
   const [chatMessageNotice, setChatMessageNotice] = useState<{
     sessionId: string;
     title: string;
@@ -4056,6 +4076,10 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
 
     if (activeApp === "music") {
       return <MusicApp onClose={() => setActiveApp(null)} />;
+    }
+
+    if (activeApp === "watch") {
+      return <WatchApp onClose={() => setActiveApp(null)} />;
     }
 
     if (activeApp === "drama") {
