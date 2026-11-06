@@ -4,7 +4,8 @@
 import { createContext, useContext, useState, useRef, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import type { MusicTrack } from "./music-storage";
 import { getAudioBlob, markTrackPlayed } from "./music-storage";
-import { findPlayableMatch, getNeteaseLyrics, getNeteasePlayUrl, getNeteasePlayInfo, getNeteaseSongDetail } from "./music-service";
+import { findPlayableMatch, getNeteaseLyrics, getNeteasePlayUrl, getNeteasePlayInfo, getNeteaseSongDetail, loadMusicSourceConfig } from "./music-service";
+import { getFreePlayUrl } from "./music-free-source";
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { registerMusicControlBridge } from "./music-control-bridge";
 import { ytEngine } from "./youtube-engine";
@@ -286,8 +287,22 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         if (track.id.startsWith("netease_")) {
             // Netease tracks: fetch play URL from API
             const nid = parseInt(track.id.replace("netease_", ""), 10);
-            const playUrl = await getNeteasePlayUrl(nid);
-            if (!playUrl) return;
+            const srcCfg = loadMusicSourceConfig();
+            const src = srcCfg.source;
+            const bases = srcCfg.freeBases;
+            let playUrl: string | null = null;
+            if (src === "free") {
+                playUrl = await getFreePlayUrl(track, bases);
+            } else {
+                playUrl = await getNeteasePlayUrl(nid);
+                // Netease returned nothing (VIP / no copyright) — try the free
+                // aggregation source so the song can still play fully.
+                if (!playUrl) playUrl = await getFreePlayUrl(track, bases);
+            }
+            if (!playUrl) {
+                notifyPlaybackError("该歌曲暂无可用播放源");
+                return;
+            }
             audio.src = playUrl;
         } else if (track.source === "dlsite") {
             // Purchased MP3 bound to this link first; otherwise the trial clip.
@@ -487,9 +502,18 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
         if (track.id.startsWith("netease_")) {
             const nid = parseInt(track.id.replace("netease_", ""), 10);
-            const info = await getNeteasePlayInfo(nid);
-            const url = info.url;
-            if (!url) return { ok: false, message: info.reason || "没有找到可播放的音乐" };
+            const srcCfg = loadMusicSourceConfig();
+            const src = srcCfg.source;
+            const bases = srcCfg.freeBases;
+            let url: string | null = null;
+            if (src === "free") {
+                url = await getFreePlayUrl(track, bases);
+            } else {
+                const info = await getNeteasePlayInfo(nid);
+                url = info.url;
+                if (!url) url = await getFreePlayUrl(track, bases);
+            }
+            if (!url) return { ok: false, message: "该歌曲暂无可用播放源" };
             const [detail, lyrics] = await Promise.all([
                 getNeteaseSongDetail(nid).catch(() => null),
                 getNeteaseLyrics(nid).catch(() => ""),

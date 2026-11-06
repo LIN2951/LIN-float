@@ -19,6 +19,7 @@ import {
     getPlaylistDetail, getUserDetail, subscribePlaylist,
     getDjSublist, getDjPrograms, getAlbumSublist, getAlbumTracks,
     getUserEvents, getRecentSongs, getIntelligenceList,
+    loadMusicSourceConfig, saveMusicSourceConfig, type MusicSourceConfig,
     type NeteaseHotSearch, type NeteaseSearchResult,
     type NeteasePlaylist, type NeteaseToplist, type MusicApiConfig,
     type NeteasePlaylistDetail, type NeteaseUserDetail, type NeteasePlayRecord,
@@ -33,6 +34,7 @@ import {
     loadMusicFloatMode, saveMusicFloatMode, type MusicFloatMode,
     loadMusicFloatSizes, saveMusicFloatSizes, normalizeMusicFloatSizes,
     MUSIC_FLOAT_SIZE_LIMITS, type MusicFloatSizes,
+    loadMusicFloatVisibility, saveMusicFloatVisibility, type MusicFloatVisibility,
 } from "@/lib/music-bg";
 
 type Props = { onClose: () => void };
@@ -1575,6 +1577,22 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
         setFloatSizes(next);
     };
 
+    // Backstage float visibility (hide without stopping music)
+    const [floatVisible, setFloatVisible] = useState<MusicFloatVisibility>(() => loadMusicFloatVisibility());
+    const applyFloatVisible = (patch: Partial<MusicFloatVisibility>) => {
+        const next = { ...floatVisible, ...patch };
+        saveMusicFloatVisibility(next);
+        setFloatVisible(next);
+    };
+
+    // Music play source: netease (official) or free aggregation
+    const [musicSource, setMusicSource] = useState<MusicSourceConfig>(() => loadMusicSourceConfig());
+    const applyMusicSource = (patch: Partial<MusicSourceConfig>) => {
+        const next = { ...musicSource, ...patch };
+        saveMusicSourceConfig(next);
+        setMusicSource(next);
+    };
+
     const applyBg = (next: MusicBgConfig) => {
         const result = saveMusicBg(next);
         setBgMsg(result.ok ? null : result.message);
@@ -1743,6 +1761,38 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                     </div>
                 )}
 
+                {/* Music play source selector */}
+                <div className="music-settings-section">
+                    <div className="music-settings-label">歌曲播放源</div>
+                    <div className="music-settings-hint">网易云 VIP / 无版权歌曲会自动用免费聚合源兜底；也可切到「免费聚合源」直接走多平台解析</div>
+                    <div className="music-bg-modes">
+                        <button
+                            className="music-bg-mode"
+                            {...(musicSource.source === "netease" ? { "data-on": "" } : {})}
+                            onClick={() => applyMusicSource({ source: "netease" })}
+                        >
+                            网易云
+                        </button>
+                        <button
+                            className="music-bg-mode"
+                            {...(musicSource.source === "free" ? { "data-on": "" } : {})}
+                            onClick={() => applyMusicSource({ source: "free" })}
+                        >
+                            免费聚合源
+                        </button>
+                    </div>
+                    <input
+                        className="music-settings-input"
+                        placeholder="Meting / UNM 接口地址，多个用逗号分隔（留空用内置公共源）"
+                        value={musicSource.freeBases}
+                        onChange={(e) => applyMusicSource({ freeBases: e.target.value })}
+                        style={{ marginTop: 10 }}
+                    />
+                    <div className="music-settings-hint" style={{ marginTop: 6 }}>
+                        公共源仅支持网易云按 ID 解析；想听完整 VIP 歌曲请填自建 Meting/inmeting/UNM 地址
+                    </div>
+                </div>
+
                 {/* QR Login Section */}
                 {config.baseUrl.trim() && (
                     <div className="music-settings-section music-qr-section">
@@ -1800,47 +1850,67 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                     </div>
 
                     <div className="music-float-size-grid">
-                        <FloatSizeStepper
-                            label="悬浮球大小"
-                            value={floatSizes.orb}
-                            min={MUSIC_FLOAT_SIZE_LIMITS.orb.min}
-                            max={MUSIC_FLOAT_SIZE_LIMITS.orb.max}
-                            step={MUSIC_FLOAT_SIZE_LIMITS.orb.step}
-                            onChange={(v) => applyFloatSize("orb", v)}
-                        />
-                        <FloatSizeStepper
-                            label="悬浮球卡片宽度"
-                            value={floatSizes.orbCardWidth}
-                            min={MUSIC_FLOAT_SIZE_LIMITS.orbCardWidth.min}
-                            max={MUSIC_FLOAT_SIZE_LIMITS.orbCardWidth.max}
-                            step={MUSIC_FLOAT_SIZE_LIMITS.orbCardWidth.step}
-                            onChange={(v) => applyFloatSize("orbCardWidth", v)}
-                        />
-                        <FloatSizeStepper
-                            label="悬浮球卡片高度"
-                            value={floatSizes.orbCardHeight}
-                            min={MUSIC_FLOAT_SIZE_LIMITS.orbCardHeight.min}
-                            max={MUSIC_FLOAT_SIZE_LIMITS.orbCardHeight.max}
-                            step={MUSIC_FLOAT_SIZE_LIMITS.orbCardHeight.step}
-                            onChange={(v) => applyFloatSize("orbCardHeight", v)}
-                        />
-                        <FloatSizeStepper
-                            label="灵动岛卡片宽度"
-                            value={floatSizes.islandWidth}
-                            min={MUSIC_FLOAT_SIZE_LIMITS.islandWidth.min}
-                            max={MUSIC_FLOAT_SIZE_LIMITS.islandWidth.max}
-                            step={MUSIC_FLOAT_SIZE_LIMITS.islandWidth.step}
-                            onChange={(v) => applyFloatSize("islandWidth", v)}
-                        />
-                        <FloatSizeStepper
-                            label="灵动岛卡片高度"
-                            value={floatSizes.islandHeight}
-                            min={MUSIC_FLOAT_SIZE_LIMITS.islandHeight.min}
-                            max={MUSIC_FLOAT_SIZE_LIMITS.islandHeight.max}
-                            step={MUSIC_FLOAT_SIZE_LIMITS.islandHeight.step}
-                            onChange={(v) => applyFloatSize("islandHeight", v)}
-                        />
+                        <div className="music-float-size-group">
+                            <div className="music-float-size-group-title">悬浮球</div>
+                            <FloatSizeStepper
+                                label="球体大小"
+                                value={floatSizes.orb}
+                                min={MUSIC_FLOAT_SIZE_LIMITS.orb.min}
+                                max={MUSIC_FLOAT_SIZE_LIMITS.orb.max}
+                                step={MUSIC_FLOAT_SIZE_LIMITS.orb.step}
+                                onChange={(v) => applyFloatSize("orb", v)}
+                            />
+                            <FloatSizeStepper
+                                label="卡片宽度"
+                                value={floatSizes.orbCardWidth}
+                                min={MUSIC_FLOAT_SIZE_LIMITS.orbCardWidth.min}
+                                max={MUSIC_FLOAT_SIZE_LIMITS.orbCardWidth.max}
+                                step={MUSIC_FLOAT_SIZE_LIMITS.orbCardWidth.step}
+                                onChange={(v) => applyFloatSize("orbCardWidth", v)}
+                            />
+                            <FloatSizeStepper
+                                label="卡片高度"
+                                value={floatSizes.orbCardHeight}
+                                min={MUSIC_FLOAT_SIZE_LIMITS.orbCardHeight.min}
+                                max={MUSIC_FLOAT_SIZE_LIMITS.orbCardHeight.max}
+                                step={MUSIC_FLOAT_SIZE_LIMITS.orbCardHeight.step}
+                                onChange={(v) => applyFloatSize("orbCardHeight", v)}
+                            />
+                        </div>
+                        <div className="music-float-size-group">
+                            <div className="music-float-size-group-title">灵动岛</div>
+                            <FloatSizeStepper
+                                label="卡片宽度"
+                                value={floatSizes.islandWidth}
+                                min={MUSIC_FLOAT_SIZE_LIMITS.islandWidth.min}
+                                max={MUSIC_FLOAT_SIZE_LIMITS.islandWidth.max}
+                                step={MUSIC_FLOAT_SIZE_LIMITS.islandWidth.step}
+                                onChange={(v) => applyFloatSize("islandWidth", v)}
+                            />
+                            <FloatSizeStepper
+                                label="卡片高度"
+                                value={floatSizes.islandHeight}
+                                min={MUSIC_FLOAT_SIZE_LIMITS.islandHeight.min}
+                                max={MUSIC_FLOAT_SIZE_LIMITS.islandHeight.max}
+                                step={MUSIC_FLOAT_SIZE_LIMITS.islandHeight.step}
+                                onChange={(v) => applyFloatSize("islandHeight", v)}
+                            />
+                        </div>
                     </div>
+
+                    <div className="music-float-visibility-row">
+                        <label className="music-float-switch">
+                            <span>隐藏悬浮球</span>
+                            <input type="checkbox" checked={!floatVisible.orb} onChange={(e) => applyFloatVisible({ orb: !e.target.checked })} />
+                            <i />
+                        </label>
+                        <label className="music-float-switch">
+                            <span>隐藏灵动岛</span>
+                            <input type="checkbox" checked={!floatVisible.island} onChange={(e) => applyFloatVisible({ island: !e.target.checked })} />
+                            <i />
+                        </label>
+                    </div>
+                    <div className="music-settings-hint">隐藏后歌曲继续在后台播放，在设置里重新开启即可恢复显示</div>
                 </div>
 
                 {/* Custom backgrounds: app pages + player page */}

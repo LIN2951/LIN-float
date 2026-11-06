@@ -197,6 +197,37 @@ export function saveMusicFloatSizes(sizes: MusicFloatSizes): void {
     window.dispatchEvent(new CustomEvent(MUSIC_FLOAT_SIZES_EVENT));
 }
 
+// ── Music float visibility (hide without stopping playback) ──
+
+export type MusicFloatVisibility = { orb: boolean; island: boolean };
+
+const MUSIC_FLOAT_VISIBILITY_KEY = "music-float-visibility-v1";
+registerKvMigration(MUSIC_FLOAT_VISIBILITY_KEY);
+
+export const MUSIC_FLOAT_VISIBILITY_EVENT = "music-float-visibility-change";
+
+export const DEFAULT_MUSIC_FLOAT_VISIBILITY: MusicFloatVisibility = { orb: true, island: true };
+
+export function loadMusicFloatVisibility(): MusicFloatVisibility {
+    if (typeof window === "undefined") return DEFAULT_MUSIC_FLOAT_VISIBILITY;
+    try {
+        const raw = kvGet(MUSIC_FLOAT_VISIBILITY_KEY);
+        if (!raw) return DEFAULT_MUSIC_FLOAT_VISIBILITY;
+        const parsed = JSON.parse(raw) as Partial<MusicFloatVisibility>;
+        return {
+            orb: parsed.orb !== false,
+            island: parsed.island !== false,
+        };
+    } catch {
+        return DEFAULT_MUSIC_FLOAT_VISIBILITY;
+    }
+}
+
+export function saveMusicFloatVisibility(v: MusicFloatVisibility): void {
+    try { kvSet(MUSIC_FLOAT_VISIBILITY_KEY, JSON.stringify(v)); } catch { /* ignore */ }
+    window.dispatchEvent(new CustomEvent(MUSIC_FLOAT_VISIBILITY_EVENT));
+}
+
 /** Background style for app pages (home / playlists / mine), or undefined for default. */
 export function appBgStyle(cfg: MusicBgConfig): BgInlineStyle | undefined {
     if (!cfg.image) return undefined;

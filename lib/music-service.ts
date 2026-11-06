@@ -1,6 +1,7 @@
 // lib/music-service.ts — Unified music search service (local + Netease Cloud Music API)
 
 import { loadAllTracks, type MusicTrack } from "./music-storage";
+import { getFreePlayUrl } from "./music-free-source";
 import { kvGet, kvSet, kvRemove, registerKvMigration } from "./kv-db";
 import {
     DEFAULT_NETEASE_API_BASE,
@@ -55,6 +56,43 @@ export function saveMusicApiConfig(config: MusicApiConfig): void {
 export function isNeteaseConfigured(): boolean {
     const cfg = loadMusicApiConfig();
     return !!cfg.baseUrl.trim();
+}
+
+// ── Music source (Netease vs free aggregation) ──
+
+export type MusicSource = "netease" | "free";
+
+export type MusicSourceConfig = {
+    source: MusicSource;
+    /** Optional comma-separated list of Meting-compatible base URLs for the free source. */
+    freeBases: string;
+};
+
+const MUSIC_SOURCE_KEY = "ai_phone_music_source_v1";
+registerKvMigration(MUSIC_SOURCE_KEY);
+
+export function loadMusicSourceConfig(): MusicSourceConfig {
+    if (typeof window === "undefined") return { source: "netease", freeBases: "" };
+    try {
+        const raw = kvGet(MUSIC_SOURCE_KEY);
+        if (!raw) return { source: "netease", freeBases: "" };
+        const parsed = JSON.parse(raw) as Partial<MusicSourceConfig>;
+        return {
+            source: parsed.source === "free" ? "free" : "netease",
+            freeBases: typeof parsed.freeBases === "string" ? parsed.freeBases : "",
+        };
+    } catch {
+        return { source: "netease", freeBases: "" };
+    }
+}
+
+export function saveMusicSourceConfig(cfg: MusicSourceConfig): void {
+    try {
+        kvSet(MUSIC_SOURCE_KEY, JSON.stringify({
+            source: cfg.source,
+            freeBases: cfg.freeBases || "",
+        }));
+    } catch { /* ignore */ }
 }
 
 // ── Cookie persistence for QR login auth ──
@@ -893,9 +931,19 @@ export async function findPlayableMatch(title: string, _artist?: string): Promis
     if (localAny) return { result: localAny };
 
     // Try netease results one by one until we find a playable URL
+    const bases = loadMusicSourceConfig().freeBases;
     const neteaseResults = results.filter(r => r.source === "netease" && r.neteaseResult);
     for (const r of neteaseResults.slice(0, 5)) {
-        const url = await getNeteasePlayUrl(r.neteaseResult!.id);
+        const nr = r.neteaseResult!;
+        let url = await getNeteasePlayUrl(nr.id);
+        // Fall back to the free aggregation source for VIP / no-copyright songs.
+        if (!url) {
+            url = await getFreePlayUrl({
+                id: `netease_${nr.id}`,
+                title: nr.name,
+                artist: nr.artists,
+            }, bases);
+        }
         if (url) return { result: r, playUrl: url };
     }
 

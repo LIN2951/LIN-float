@@ -1157,9 +1157,9 @@
     top: 50%;
     width: var(--mf-card-w, 264px);
     height: var(--mf-card-h, 126px);
-    padding: 10px 12px;
+    padding: clamp(8px, calc(var(--mf-card-h, 126px) * 0.08), 14px) clamp(10px, calc(var(--mf-card-w, 264px) * 0.045), 14px);
     box-sizing: border-box;
-    border-radius: 24px;
+    border-radius: clamp(18px, calc(var(--mf-card-h, 126px) * 0.2), 28px);
     overflow: hidden;
     transform: translateY(-50%);
     display: flex;
@@ -1190,9 +1190,9 @@
 }
 
 .music-float-card-cover {
-    width: 44px;
-    height: 44px;
-    flex: 0 0 44px;
+    width: clamp(34px, calc(var(--mf-card-h, 126px) * 0.38), 54px);
+    height: clamp(34px, calc(var(--mf-card-h, 126px) * 0.38), 54px);
+    flex: 0 0 clamp(34px, calc(var(--mf-card-h, 126px) * 0.38), 54px);
     border-radius: 12px;
     overflow: hidden;
     padding: 0;
@@ -1214,7 +1214,7 @@
 
 .music-float-island .music-float-title {
     color: #fff;
-    font-size: calc(13px * var(--app-text-scale, 1));
+    font-size: clamp(11px, calc(var(--mf-card-h, 126px) * 0.11), 15px);
     font-weight: 600;
     letter-spacing: 0.2px;
 }
@@ -1222,17 +1222,18 @@
 .music-float-island .music-float-artist {
     margin-top: 2px;
     color: rgba(255, 255, 255, 0.62);
+    font-size: clamp(9px, calc(var(--mf-card-h, 126px) * 0.085), 12px);
 }
 
 .music-float-progress-row {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-top: 8px;
+    margin-top: clamp(4px, calc(var(--mf-card-h, 126px) * 0.06), 10px);
 }
 
 .music-float-time {
-    font-size: 9px;
+    font-size: clamp(8px, calc(var(--mf-card-h, 126px) * 0.075), 11px);
     line-height: 1;
     color: rgba(255, 255, 255, 0.58);
     font-variant-numeric: tabular-nums;
@@ -1243,7 +1244,7 @@
 .music-float-progress {
     position: relative;
     flex: 1;
-    height: 4px;
+    height: clamp(3px, calc(var(--mf-card-h, 126px) * 0.035), 5px);
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.18);
     cursor: pointer;
@@ -1261,16 +1262,16 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 16px;
-    margin-top: 6px;
+    gap: clamp(10px, calc(var(--mf-card-w, 264px) * 0.06), 22px);
+    margin-top: clamp(2px, calc(var(--mf-card-h, 126px) * 0.04), 8px);
 }
 
 .music-float-ctrl {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
+    width: clamp(26px, calc(var(--mf-card-h, 126px) * 0.26), 34px);
+    height: clamp(26px, calc(var(--mf-card-h, 126px) * 0.26), 34px);
     padding: 0;
     border: none;
     border-radius: 50%;
@@ -5167,6 +5168,79 @@
     font-size: calc(10.8px * var(--app-text-scale, 1));
     color: var(--c-music-accent);
     font-variant-numeric: tabular-nums;
+}
+
+.music-float-size-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.music-float-size-group-title {
+    font-size: calc(10.4px * var(--app-text-scale, 1));
+    color: var(--c-music-accent);
+    font-weight: 600;
+    margin-top: 2px;
+    padding-left: 2px;
+    letter-spacing: 0.3px;
+}
+
+/* 隐藏悬浮球 / 隐藏灵动岛 开关 */
+.music-float-visibility-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.music-float-switch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    cursor: pointer;
+    user-select: none;
+    font-size: calc(10.8px * var(--app-text-scale, 1));
+    color: var(--c-music-text);
+}
+
+.music-float-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.music-float-switch i {
+    position: relative;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--c-music-surface-solid);
+    border: 1px solid var(--c-music-surface-solid);
+    transition: background 0.2s;
+}
+
+.music-float-switch i::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.music-float-switch input:checked + i {
+    background: var(--c-music-accent);
+    border-color: var(--c-music-accent);
+}
+
+.music-float-switch input:checked + i::after {
+    transform: translateX(16px);
 }
 
 /* 歌单收藏/评论胶囊为可点按钮 */

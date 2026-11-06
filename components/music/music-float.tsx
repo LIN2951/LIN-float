@@ -5,12 +5,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMusicPlayerOptional, type MusicControlsValue } from "@/lib/music-context";
 import {
     DEFAULT_MUSIC_FLOAT_SIZES,
+    DEFAULT_MUSIC_FLOAT_VISIBILITY,
     MUSIC_FLOAT_MODE_EVENT,
     MUSIC_FLOAT_SIZES_EVENT,
+    MUSIC_FLOAT_VISIBILITY_EVENT,
     loadMusicFloatMode,
     loadMusicFloatSizes,
+    loadMusicFloatVisibility,
     type MusicFloatMode,
     type MusicFloatSizes,
+    type MusicFloatVisibility,
 } from "@/lib/music-bg";
 import {
     CloudLikeButton,
@@ -437,7 +441,6 @@ function MusicFloatIsland({
                     {swipeHint ? (
                         <span className="music-island-swipe-hint" data-dir={swipeHint.dir}>
                             <span className="music-island-swipe-arrow">{swipeHint.dir === "prev" ? "‹" : "›"}</span>
-                            <span className="music-island-swipe-label">{swipeHint.dir === "prev" ? "上一首" : "下一首"}</span>
                             <span className="music-island-swipe-title">{swipeHint.title}</span>
                         </span>
                     ) : (
@@ -537,7 +540,6 @@ function MusicFloatIsland({
                         {swipeHint && (
                             <div className="music-island-swipe-hint" data-dir={swipeHint.dir} data-overlay>
                                 <span className="music-island-swipe-arrow">{swipeHint.dir === "prev" ? "‹" : "›"}</span>
-                                <span className="music-island-swipe-label">{swipeHint.dir === "prev" ? "上一首" : "下一首"}</span>
                                 <span className="music-island-swipe-title">{swipeHint.title}</span>
                             </div>
                         )}
@@ -556,19 +558,24 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
     const player = useMusicPlayerOptional();
     const [mode, setMode] = useState<MusicFloatMode>("orb");
     const [sizes, setSizes] = useState<MusicFloatSizes>(DEFAULT_MUSIC_FLOAT_SIZES);
+    const [visible, setVisible] = useState<MusicFloatVisibility>(DEFAULT_MUSIC_FLOAT_VISIBILITY);
     const [lyricsVisible, setLyricsVisible] = useState(false);
     const [lyricsLocked, setLyricsLocked] = useState(false);
 
     useEffect(() => {
         setMode(loadMusicFloatMode());
         setSizes(loadMusicFloatSizes());
+        setVisible(loadMusicFloatVisibility());
         const onModeChange = () => setMode(loadMusicFloatMode());
         const onSizesChange = () => setSizes(loadMusicFloatSizes());
+        const onVisibilityChange = () => setVisible(loadMusicFloatVisibility());
         window.addEventListener(MUSIC_FLOAT_MODE_EVENT, onModeChange);
         window.addEventListener(MUSIC_FLOAT_SIZES_EVENT, onSizesChange);
+        window.addEventListener(MUSIC_FLOAT_VISIBILITY_EVENT, onVisibilityChange);
         return () => {
             window.removeEventListener(MUSIC_FLOAT_MODE_EVENT, onModeChange);
             window.removeEventListener(MUSIC_FLOAT_SIZES_EVENT, onSizesChange);
+            window.removeEventListener(MUSIC_FLOAT_VISIBILITY_EVENT, onVisibilityChange);
         };
     }, []);
 
@@ -592,10 +599,10 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
 
     return (
         <>
-            {active && !shouldHide && (mode === "orb" || mode === "both") && (
+            {active && !shouldHide && visible.orb && (mode === "orb" || mode === "both") && (
                 <MusicFloatOrb player={active} sizes={sizes} />
             )}
-            {active && !shouldHide && (mode === "island" || mode === "both") && (
+            {active && !shouldHide && visible.island && (mode === "island" || mode === "both") && (
                 <MusicFloatIsland player={active} sizes={sizes} lyricsVisible={lyricsVisible} onToggleLyrics={toggleLyrics} />
             )}
             <MusicDesktopLyrics
