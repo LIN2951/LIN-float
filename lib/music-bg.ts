@@ -108,19 +108,21 @@ function buildBgStyle(image: string, dimPct: number, boost: number): BgInlineSty
 
 // ── Music float mode (orb ball / top dynamic island) ──
 
-export type MusicFloatMode = "orb" | "island";
+export type MusicFloatMode = "orb" | "island" | "both";
 
 const MUSIC_FLOAT_MODE_KEY = "music-float-mode-v1";
 registerKvMigration(MUSIC_FLOAT_MODE_KEY);
 
 export const MUSIC_FLOAT_MODE_EVENT = "music-float-mode-change";
 
-export const DEFAULT_MUSIC_FLOAT_MODE: MusicFloatMode = "orb";
+export const DEFAULT_MUSIC_FLOAT_MODE: MusicFloatMode = "both";
 
 export function loadMusicFloatMode(): MusicFloatMode {
     if (typeof window === "undefined") return DEFAULT_MUSIC_FLOAT_MODE;
     try {
-        return kvGet(MUSIC_FLOAT_MODE_KEY) === "island" ? "island" : "orb";
+        const stored = kvGet(MUSIC_FLOAT_MODE_KEY);
+        if (stored === "orb" || stored === "island" || stored === "both") return stored;
+        return DEFAULT_MUSIC_FLOAT_MODE;
     } catch {
         return DEFAULT_MUSIC_FLOAT_MODE;
     }

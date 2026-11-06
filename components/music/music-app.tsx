@@ -1766,8 +1766,9 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                     <div className="music-settings-label">音乐悬浮窗样式</div>
                     <div className="music-settings-hint">播放音乐后回到桌面显示；切换即时生效，刷新后保留选择</div>
                     <div className="music-bg-modes">
-                        <button className="music-bg-mode" {...(floatMode === "orb" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("orb")}>悬浮球</button>
-                        <button className="music-bg-mode" {...(floatMode === "island" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("island")}>顶部灵动岛</button>
+                        <button className="music-bg-mode" {...(floatMode === "both" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("both")}>同时显示</button>
+                        <button className="music-bg-mode" {...(floatMode === "orb" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("orb")}>仅悬浮球</button>
+                        <button className="music-bg-mode" {...(floatMode === "island" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("island")}>仅灵动岛</button>
                     </div>
                 </div>
 

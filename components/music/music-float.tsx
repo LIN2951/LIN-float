@@ -459,10 +459,10 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
 
     return (
         <>
-            {active && !shouldHide && mode === "orb" && (
+            {active && !shouldHide && (mode === "orb" || mode === "both") && (
                 <MusicFloatOrb player={active} />
             )}
-            {active && !shouldHide && mode === "island" && (
+            {active && !shouldHide && (mode === "island" || mode === "both") && (
                 <MusicFloatIsland player={active} lyricsVisible={lyricsVisible} onToggleLyrics={toggleLyrics} />
             )}
             <MusicDesktopLyrics
