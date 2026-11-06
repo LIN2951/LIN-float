@@ -30,6 +30,7 @@ import OtomePlayerView from "./otome-player-view";
 import {
     loadMusicBg, saveMusicBg, clearMusicBg, fileToCompressedDataUrl, appBgStyle,
     MUSIC_BG_EVENT, type MusicBgConfig, type MusicPlayerBgMode,
+    loadMusicFloatMode, saveMusicFloatMode, type MusicFloatMode,
 } from "@/lib/music-bg";
 
 type Props = { onClose: () => void };
@@ -1539,6 +1540,13 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
     const bgFileRef = useRef<HTMLInputElement>(null);
     const playerFileRef = useRef<HTMLInputElement>(null);
 
+    // Backstage float style: orb ball or top dynamic island
+    const [floatMode, setFloatMode] = useState<MusicFloatMode>(() => loadMusicFloatMode());
+    const applyFloatMode = (mode: MusicFloatMode) => {
+        saveMusicFloatMode(mode);
+        setFloatMode(mode);
+    };
+
     const applyBg = (next: MusicBgConfig) => {
         const result = saveMusicBg(next);
         setBgMsg(result.ok ? null : result.message);
@@ -1752,6 +1760,16 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                         </button>
                     </div>
                 )}
+
+                {/* Backstage float style */}
+                <div className="music-settings-section music-qr-section">
+                    <div className="music-settings-label">音乐悬浮窗样式</div>
+                    <div className="music-settings-hint">播放音乐后回到桌面显示；切换即时生效，刷新后保留选择</div>
+                    <div className="music-bg-modes">
+                        <button className="music-bg-mode" {...(floatMode === "orb" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("orb")}>悬浮球</button>
+                        <button className="music-bg-mode" {...(floatMode === "island" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("island")}>顶部灵动岛</button>
+                    </div>
+                </div>
 
                 {/* Custom backgrounds: app pages + player page */}
                 <div className="music-settings-section music-qr-section">

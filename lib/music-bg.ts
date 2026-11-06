@@ -106,6 +106,31 @@ function buildBgStyle(image: string, dimPct: number, boost: number): BgInlineSty
     };
 }
 
+// ── Music float mode (orb ball / top dynamic island) ──
+
+export type MusicFloatMode = "orb" | "island";
+
+const MUSIC_FLOAT_MODE_KEY = "music-float-mode-v1";
+registerKvMigration(MUSIC_FLOAT_MODE_KEY);
+
+export const MUSIC_FLOAT_MODE_EVENT = "music-float-mode-change";
+
+export const DEFAULT_MUSIC_FLOAT_MODE: MusicFloatMode = "orb";
+
+export function loadMusicFloatMode(): MusicFloatMode {
+    if (typeof window === "undefined") return DEFAULT_MUSIC_FLOAT_MODE;
+    try {
+        return kvGet(MUSIC_FLOAT_MODE_KEY) === "island" ? "island" : "orb";
+    } catch {
+        return DEFAULT_MUSIC_FLOAT_MODE;
+    }
+}
+
+export function saveMusicFloatMode(mode: MusicFloatMode): void {
+    try { kvSet(MUSIC_FLOAT_MODE_KEY, mode); } catch { /* ignore */ }
+    window.dispatchEvent(new CustomEvent(MUSIC_FLOAT_MODE_EVENT));
+}
+
 /** Background style for app pages (home / playlists / mine), or undefined for default. */
 export function appBgStyle(cfg: MusicBgConfig): BgInlineStyle | undefined {
     if (!cfg.image) return undefined;

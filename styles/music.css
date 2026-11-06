@@ -1065,189 +1065,710 @@
 
 
 /* ══════════════════════════════════════════════════
-   Floating Widget — Rounded Rectangle Glassmorphism Player
+   Music Floating Controls — Orb ball / Dynamic island
    ══════════════════════════════════════════════════ */
 
 .music-float {
     position: absolute;
     z-index: 55;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+    width: 46px;
+    height: 46px;
     touch-action: none;
-    cursor: grab;
     user-select: none;
-    transition: width 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), height 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), transform 0.25s ease-out, opacity 0.25s ease-out;
-    animation: music-float-in 0.5s var(--ease-out);
-
-    /* Layout */
-    width: 72px;
-    height: 72px;
-    border-radius: 36px;
-    overflow: hidden;
-
-    /* Glassmorphism Aesthetics */
-    background: var(--c-music-surface);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    box-shadow:
-        inset 0 1px 1px var(--c-music-surface-solid),
-        inset 0 -1px 1px var(--c-music-overlay),
-        0 8px 24px var(--c-music-accent-dim),
-        0 2px 8px var(--c-music-accent-dim);
-    border: 1px solid var(--c-music-surface);
 }
 
 .music-float[data-dismissing] {
-    transform: translateX(-120%) scale(0.8);
-    opacity: 0;
+    animation: music-float-out 0.22s ease-in forwards;
     pointer-events: none;
 }
 
-.music-float[data-expanded] {
-    width: 260px;
-    height: 84px;
-    border-radius: 24px;
-}
-
-.music-float-inner {
-    display: flex;
-    align-items: center;
-    width: 260px;
-    height: 100%;
-    padding: 0 12px;
-    box-sizing: border-box;
-    /* Center 56px cover in 72px outer (content area 70px after 1px border): (70-56)/2 = 7px */
-    padding-left: 7px;
-    transition: padding 0.3s;
-}
-
-.music-float[data-expanded] .music-float-inner {
-    padding-left: 12px;
-}
-
-/* ── Cover Art inside float (Mini Vinyl) ── */
-.music-float-cover-wrap {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    flex-shrink: 0;
+/* ── Orb ── */
+.music-float-orb {
     position: relative;
-    cursor: pointer;
-    background: radial-gradient(circle,
-            var(--c-music-surface) 0%,
-            var(--c-music-glass-dim) 35%,
-            var(--c-music-glass-dim) 50%,
-            var(--c-music-glass-dim) 65%,
-            var(--c-music-surface) 100%);
-    box-shadow:
-        0 0 0 1px var(--c-music-accent-dim),
-        0 4px 12px var(--c-music-accent-dim),
-        inset 0 0 8px var(--c-music-surface-solid);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.music-float-cover-wrap[data-playing] {
-    animation: music-vinyl-spin 8s linear infinite;
-}
-
-.music-float-vinyl-groove {
-    position: absolute;
-    border-radius: 50%;
-    border: 0.5px solid var(--c-music-glass-dim);
-    pointer-events: none;
-}
-
-.music-float-vinyl-groove-1 {
-    inset: 15%;
-}
-
-.music-float-vinyl-groove-2 {
-    inset: 30%;
-}
-
-.music-float-vinyl-center {
-    width: 20px;
-    height: 20px;
+    width: 46px;
+    height: 46px;
     border-radius: 50%;
     overflow: hidden;
-    background: var(--c-music-surface);
+    cursor: grab;
+    touch-action: none;
+    background: rgba(78, 78, 84, 0.32);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.16),
+        0 6px 18px rgba(0, 0, 0, 0.22);
+    transition: transform 0.28s var(--ease-out), opacity 0.28s var(--ease-out);
+    animation: music-float-in 0.5s var(--ease-out);
+}
+
+.music-float[data-dragging] .music-float-orb {
+    cursor: grabbing;
+    transition: none;
+}
+
+.music-float[data-tucked] .music-float-orb {
+    opacity: 0.32;
+}
+
+.music-float[data-tucked][data-side="right"] .music-float-orb {
+    transform: translateX(21px);
+}
+
+.music-float[data-tucked][data-side="left"] .music-float-orb {
+    transform: translateX(-21px);
+}
+
+.music-float-orb[data-playing]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    animation: music-orb-pulse 2.2s ease-out infinite;
+    pointer-events: none;
+}
+
+.music-float-cover-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+}
+
+.music-float-cover-glyph {
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: inset 0 0 4px var(--c-music-surface);
+    width: 100%;
+    height: 100%;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.music-float-orb-wave {
+    position: absolute;
+    right: 5px;
+    bottom: 5px;
+    pointer-events: none;
+}
+
+/* ── Orb expanded card ── */
+.music-float-island {
+    position: absolute;
+    top: 50%;
+    width: 264px;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    border-radius: 24px;
+    overflow: hidden;
+    transform: translateY(-50%);
+    background: rgba(78, 78, 84, 0.32);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+    color: #fff;
+}
+
+.music-float-island[data-side="right"] {
+    right: calc(100% + 12px);
+    animation: music-island-reveal-right 0.28s var(--ease-out) both;
+}
+
+.music-float-island[data-side="left"] {
+    left: calc(100% + 12px);
+    animation: music-island-reveal-left 0.28s var(--ease-out) both;
+}
+
+.music-float-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.music-float-card-cover {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    border-radius: 12px;
+    overflow: hidden;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+}
+
+.music-float-card-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.music-float-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.music-float-island .music-float-title {
+    color: #fff;
+    font-size: calc(13px * var(--app-text-scale, 1));
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
+.music-float-island .music-float-artist {
+    margin-top: 2px;
+    color: rgba(255, 255, 255, 0.62);
+}
+
+.music-float-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.music-float-time {
+    font-size: 9px;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.58);
+    font-variant-numeric: tabular-nums;
+    min-width: 24px;
+    text-align: center;
+}
+
+.music-float-progress {
+    position: relative;
+    flex: 1;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    cursor: pointer;
+}
+
+.music-float-progress-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.88);
+    pointer-events: none;
+}
+
+.music-float-card-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 6px;
+}
+
+.music-float-ctrl {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    color: rgba(255, 255, 255, 0.86);
+    cursor: pointer;
+    transition: transform 0.18s, background 0.18s;
+}
+
+.music-float-ctrl:active {
+    transform: scale(0.88);
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.music-float-ctrl-play {
+    color: #fff;
+}
+
+.music-float-close {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    height: 24px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(78, 78, 84, 0.32);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+/* ── Wave bars (playback state decoration, not spectrum analysis) ── */
+.music-wave-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+    flex: 0 0 auto;
+}
+
+.music-wave-bars i {
+    display: block;
+    width: 2px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.55);
+}
+
+.music-wave-bars[data-playing] i {
+    background: #63e6a5;
+    animation: music-wave-bounce 0.9s ease-in-out infinite;
+}
+
+.music-wave-bars[data-playing] i:nth-child(2) {
+    animation-delay: 0.18s;
+}
+
+.music-wave-bars[data-playing] i:nth-child(3) {
+    animation-delay: 0.36s;
+}
+
+/* ── Top dynamic island ── */
+.music-island-root {
+    position: absolute;
+    inset: 0;
+    z-index: 56;
+    pointer-events: none;
+}
+
+.music-status-island {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: min(148px, 42%);
+    height: 36px;
+    padding: 0 10px 0 5px;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 999px;
+    background: #050506;
+    color: #fff;
+    pointer-events: auto;
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    animation: music-status-island-in 0.28s var(--ease-out);
+}
+
+.music-status-island-cover {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.music-status-island-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.music-status-island-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.music-island-scrim {
+    position: absolute;
+    inset: 0;
+    pointer-events: auto;
+    background: transparent;
+    animation: music-island-scrim-in 0.2s ease-out;
+}
+
+.music-dynamic-island-panel {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    left: 50%;
+    width: min(300px, calc(100% - 28px));
+    height: 128px;
+    box-sizing: border-box;
+    padding: 12px 14px;
+    border-radius: 28px;
+    overflow: hidden;
+    transform: translateX(-50%);
+    background: #050506;
+    color: #fff;
+    pointer-events: auto;
+    cursor: pointer;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42);
+    animation: music-dynamic-island-expand 0.34s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.music-dynamic-island-panel[data-closing] {
+    animation: music-dynamic-island-retract 0.21s ease-in both;
+    pointer-events: none;
+}
+
+.music-dynamic-island-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    opacity: 0;
+    animation: music-island-content-in 0.18s 0.1s ease-out forwards;
+}
+
+.music-dynamic-island-top {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.music-dynamic-island-cover {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.music-dynamic-island-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.music-dynamic-island-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.music-dynamic-island-title {
+    font-size: calc(13px * var(--app-text-scale, 1));
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.music-dynamic-island-artist {
+    margin-top: 2px;
+    font-size: calc(10px * var(--app-text-scale, 1));
+    color: rgba(255, 255, 255, 0.58);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.music-dynamic-island-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+}
+
+.music-dynamic-island-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 7px;
+}
+
+.music-dynamic-island-time {
+    min-width: 26px;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.5);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+.music-dynamic-island-progress {
+    position: relative;
+    flex: 1;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    cursor: pointer;
+}
+
+.music-dynamic-island-progress-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.84);
+    pointer-events: none;
+}
+
+.music-dynamic-island-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin-top: auto;
+    padding: 0 4px;
+}
+
+.music-float-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s, transform 0.18s;
+}
+
+.music-float-icon-btn:active {
+    transform: scale(0.9);
+    color: #fff;
+}
+
+.music-float-icon-btn[data-active] {
+    color: #63e6a5;
+}
+
+.music-float-icon-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.music-float-ctrl-play {
+    color: #fff;
+}
+
+.music-float-heart-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.music-float-like[data-active] {
+    color: #ff5c7a;
+}
+
+.music-float-heart-msg {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.72);
+    color: #fff;
+    font-size: 9px;
+    line-height: 1.3;
+    white-space: nowrap;
     z-index: 2;
 }
 
-
-.music-float-cover-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--c-music-accent);
-    opacity: 0.6;
+/* ── Desktop lyrics ── */
+.music-desktop-lyrics {
+    position: absolute;
+    z-index: 57;
+    width: min(360px, calc(100% - 20px));
+    box-sizing: border-box;
+    padding: 14px 16px 10px;
+    border-radius: 22px;
+    color: #fff;
+    user-select: none;
+    touch-action: none;
+    cursor: grab;
 }
 
-/* ── Info Area ── */
-.music-float-info {
-    margin: 0 12px;
+.music-desktop-lyrics:not([data-locked]) {
+    background: rgba(18, 18, 22, 0.42);
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+
+.music-desktop-lyrics[data-locked] {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    padding: 0;
+    pointer-events: none;
+    cursor: default;
+}
+
+.music-desktop-lyrics[data-dragging] {
+    cursor: grabbing;
+}
+
+.music-desktop-lyrics-lines {
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    cursor: pointer;
-    opacity: 0;
-    transform: translateX(-10px);
-    transition: opacity 0.3s, transform 0.3s;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
 }
 
-.music-float[data-expanded] .music-float-info {
-    opacity: 1;
-    transform: translateX(0);
-    transition-delay: 0.1s;
+.music-desktop-lyrics[data-locked] .music-desktop-lyrics-lines {
+    padding: 0;
 }
 
-.music-float-title {
-    font-size: calc(11.7px*var(--app-text-scale,1));
+.music-desktop-lyrics-line {
     font-weight: 600;
-    letter-spacing: 0.3px;
+    line-height: 1.3;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
+.music-desktop-lyrics-line[data-next] {
+    font-weight: 500;
+    opacity: 0.62;
+}
 
-/* ── Controls Area ── */
-.music-float-controls {
+.music-desktop-lyrics[data-color="black"] .music-desktop-lyrics-line {
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.35);
+}
+
+.music-desktop-lyrics-toolbar {
     display: flex;
     align-items: center;
-    gap: 2px;
-    opacity: 0;
-    transform: translateX(10px);
-    transition: opacity 0.3s, transform 0.3s;
+    justify-content: center;
+    gap: 5px;
+    margin-top: 8px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.music-float[data-expanded] .music-float-controls {
-    opacity: 1;
-    transform: translateX(0);
-    transition-delay: 0.15s;
+.music-desktop-lyrics-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 5px;
+    border: none;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 10px;
+    cursor: pointer;
 }
 
-.music-float-btn {
-    width: 28px;
-    height: 28px;
+.music-desktop-lyrics-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
 
-.music-float-btn:active {
-    background: var(--c-music-accent-dim);
-    color: var(--c-music-accent);
-    transform: scale(0.9);
+.music-desktop-lyrics-swatches {
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
-.music-float-btn-play {
-    color: var(--c-music-accent);
+.music-desktop-lyrics-swatch {
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+}
+
+.music-desktop-lyrics-swatch[data-on] {
+    outline: 2px solid rgba(255, 255, 255, 0.85);
+    outline-offset: 1px;
+}
+
+.music-desktop-lyrics-close {
+    margin-left: 2px;
+}
+
+@keyframes music-orb-pulse {
+    0% { transform: scale(0.82); opacity: 0.5; }
+    70% { transform: scale(1.25); opacity: 0; }
+    100% { transform: scale(1.25); opacity: 0; }
+}
+
+@keyframes music-float-out {
+    to { opacity: 0; transform: scale(0.7); }
+}
+
+@keyframes music-island-reveal-right {
+    from { clip-path: inset(0 0 0 100%); opacity: 0.35; }
+    to { clip-path: inset(0 0 0 0); opacity: 1; }
+}
+
+@keyframes music-island-reveal-left {
+    from { clip-path: inset(0 100% 0 0); opacity: 0.35; }
+    to { clip-path: inset(0 0 0 0); opacity: 1; }
+}
+
+@keyframes music-status-island-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.9); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+@keyframes music-island-scrim-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes music-dynamic-island-expand {
+    from {
+        clip-path: inset(0 25% 72% 25% round 999px);
+        opacity: 0.75;
+    }
+    to {
+        clip-path: inset(0 0 0 0 round 28px);
+        opacity: 1;
+    }
+}
+
+@keyframes music-dynamic-island-retract {
+    from {
+        clip-path: inset(0 0 0 0 round 28px);
+        opacity: 1;
+    }
+    to {
+        clip-path: inset(0 25% 72% 25% round 999px);
+        opacity: 0.35;
+    }
+}
+
+@keyframes music-island-content-in {
+    from { opacity: 0; translate: 0 -6px; }
+    to { opacity: 1; translate: 0 0; }
 }
 
 
@@ -3976,15 +4497,6 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.music-float {
-    box-shadow:
-        inset 0 1px 1px rgba(255, 255, 255, 0.12),
-        inset 0 -1px 1px var(--c-music-overlay),
-        0 8px 24px rgba(0, 0, 0, 0.45),
-        0 0 24px rgba(140, 170, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
 /* ═══════════════════════════════════════════════════════
    Lumen polish v2 — flat song rows, dark vinyl, alignment
    ═══════════════════════════════════════════════════════ */
@@ -4324,31 +4836,6 @@
     accent-color: var(--c-music-primary);
     height: 24px;
     cursor: pointer;
-}
-
-/* ═══════════════════════════════════════════════════════
-   悬浮球独立配色 — 桌面浮球回归原浅色玻璃，不随App暗色主题
-   ═══════════════════════════════════════════════════════ */
-
-.music-float {
-    /* Scoped token overrides: the ball lives on the (light) home screen,
-       so it keeps the original Spring-Light glass palette. */
-    --c-music-surface: rgba(255, 255, 255, 0.3);
-    --c-music-surface-solid: rgba(255, 255, 255, 0.55);
-    --c-music-glass-dim: rgba(255, 255, 255, 0.08);
-    --c-music-accent: #5b7b64;
-    --c-music-accent-dim: rgba(106, 141, 115, 0.15);
-    --c-music-text: #2b3d31;
-    --c-music-overlay: rgba(0, 0, 0, 0.25);
-    --c-music-gold: rgba(212, 168, 83, 0.3);
-
-    background: var(--c-music-surface);
-    border: 1px solid var(--c-music-surface);
-    box-shadow:
-        inset 0 1px 1px var(--c-music-surface-solid),
-        inset 0 -1px 1px var(--c-music-overlay),
-        0 8px 24px var(--c-music-accent-dim),
-        0 2px 8px var(--c-music-accent-dim);
 }
 
 /* ═══════════════════════════════════════════════════════

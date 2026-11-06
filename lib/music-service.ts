@@ -279,6 +279,42 @@ export async function getNeteaseLyrics(songId: number): Promise<string> {
     }
 }
 
+// ── Cloud like (红心) ──
+
+export type CloudLikeState = { ok: boolean; liked: boolean; message?: string };
+
+/** Read the real liked state of a Netease song for the logged-in account. */
+export async function getCloudSongLiked(songId: number): Promise<CloudLikeState> {
+    if (!loadNeteaseCookie()) return { ok: false, liked: false, message: "请先登录网易云账号" };
+    const base = neteaseBase();
+    const uid = await getLoginUid();
+    if (!base || !uid) return { ok: false, liked: false, message: "网易云登录已失效" };
+    try {
+        const resp = await fetch(withNeteaseParams(`${base}/likelist?uid=${uid}&timestamp=${Date.now()}`));
+        const data = await resp.json();
+        if (data?.code !== 200) return { ok: false, liked: false, message: data?.message || "读取红心失败" };
+        const ids: number[] = Array.isArray(data?.ids) ? data.ids : [];
+        return { ok: true, liked: ids.includes(songId) };
+    } catch (e) {
+        return { ok: false, liked: false, message: e instanceof Error ? e.message : "网络异常" };
+    }
+}
+
+/** Write the real liked state of a Netease song for the logged-in account. */
+export async function setCloudSongLiked(songId: number, liked: boolean): Promise<CloudLikeState> {
+    if (!loadNeteaseCookie()) return { ok: false, liked, message: "请先登录网易云账号" };
+    const base = neteaseBase();
+    if (!base) return { ok: false, liked, message: "未配置网易云 API 地址" };
+    try {
+        const resp = await fetch(withNeteaseParams(`${base}/like?t=${liked ? 1 : 2}&id=${songId}&timestamp=${Date.now()}`));
+        const data = await resp.json();
+        if (data?.code !== 200) return { ok: false, liked, message: data?.message || "操作失败" };
+        return { ok: true, liked };
+    } catch (e) {
+        return { ok: false, liked, message: e instanceof Error ? e.message : "网络异常" };
+    }
+}
+
 /** Get song detail (cover, artist ids, etc.) */
 export async function getNeteaseSongDetail(songId: number): Promise<{ coverUrl?: string; name?: string; artists?: string; artistList?: { id: number; name: string }[]; album?: string } | null> {
     const base = neteaseBase();
