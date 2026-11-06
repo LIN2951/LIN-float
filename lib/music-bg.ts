@@ -133,6 +133,70 @@ export function saveMusicFloatMode(mode: MusicFloatMode): void {
     window.dispatchEvent(new CustomEvent(MUSIC_FLOAT_MODE_EVENT));
 }
 
+// ── Music float sizes (orb / orb card / island card) ──
+
+export type MusicFloatSizes = {
+    orb: number;
+    orbCardWidth: number;
+    orbCardHeight: number;
+    islandWidth: number;
+    islandHeight: number;
+};
+
+const MUSIC_FLOAT_SIZES_KEY = "music-float-sizes-v1";
+registerKvMigration(MUSIC_FLOAT_SIZES_KEY);
+
+export const MUSIC_FLOAT_SIZES_EVENT = "music-float-sizes-change";
+
+export const MUSIC_FLOAT_SIZE_LIMITS = {
+    orb: { min: 34, max: 76, step: 2 },
+    orbCardWidth: { min: 210, max: 340, step: 8 },
+    orbCardHeight: { min: 112, max: 184, step: 6 },
+    islandWidth: { min: 240, max: 380, step: 10 },
+    islandHeight: { min: 112, max: 190, step: 6 },
+} as const;
+
+export const DEFAULT_MUSIC_FLOAT_SIZES: MusicFloatSizes = {
+    orb: 46,
+    orbCardWidth: 264,
+    orbCardHeight: 126,
+    islandWidth: 300,
+    islandHeight: 128,
+};
+
+function clampSize(key: keyof MusicFloatSizes, value: unknown): number {
+    const limit = MUSIC_FLOAT_SIZE_LIMITS[key];
+    const n = typeof value === "number" && Number.isFinite(value) ? value : DEFAULT_MUSIC_FLOAT_SIZES[key];
+    return Math.max(limit.min, Math.min(limit.max, Math.round(n)));
+}
+
+export function normalizeMusicFloatSizes(input: Partial<MusicFloatSizes> | null | undefined): MusicFloatSizes {
+    return {
+        orb: clampSize("orb", input?.orb),
+        orbCardWidth: clampSize("orbCardWidth", input?.orbCardWidth),
+        orbCardHeight: clampSize("orbCardHeight", input?.orbCardHeight),
+        islandWidth: clampSize("islandWidth", input?.islandWidth),
+        islandHeight: clampSize("islandHeight", input?.islandHeight),
+    };
+}
+
+export function loadMusicFloatSizes(): MusicFloatSizes {
+    if (typeof window === "undefined") return DEFAULT_MUSIC_FLOAT_SIZES;
+    try {
+        const raw = kvGet(MUSIC_FLOAT_SIZES_KEY);
+        if (!raw) return DEFAULT_MUSIC_FLOAT_SIZES;
+        return normalizeMusicFloatSizes(JSON.parse(raw) as Partial<MusicFloatSizes>);
+    } catch {
+        return DEFAULT_MUSIC_FLOAT_SIZES;
+    }
+}
+
+export function saveMusicFloatSizes(sizes: MusicFloatSizes): void {
+    const next = normalizeMusicFloatSizes(sizes);
+    try { kvSet(MUSIC_FLOAT_SIZES_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+    window.dispatchEvent(new CustomEvent(MUSIC_FLOAT_SIZES_EVENT));
+}
+
 /** Background style for app pages (home / playlists / mine), or undefined for default. */
 export function appBgStyle(cfg: MusicBgConfig): BgInlineStyle | undefined {
     if (!cfg.image) return undefined;

@@ -31,10 +31,30 @@ import {
     loadMusicBg, saveMusicBg, clearMusicBg, fileToCompressedDataUrl, appBgStyle,
     MUSIC_BG_EVENT, type MusicBgConfig, type MusicPlayerBgMode,
     loadMusicFloatMode, saveMusicFloatMode, type MusicFloatMode,
+    loadMusicFloatSizes, saveMusicFloatSizes, normalizeMusicFloatSizes,
+    MUSIC_FLOAT_SIZE_LIMITS, type MusicFloatSizes,
 } from "@/lib/music-bg";
 
 type Props = { onClose: () => void };
 type TabId = "recommend" | "mine" | "search" | "local";
+
+function FloatSizeStepper({
+    label, value, min, max, step, onChange,
+}: {
+    label: string; value: number; min: number; max: number; step: number;
+    onChange: (value: number) => void;
+}) {
+    return (
+        <div className="music-float-size-row">
+            <span className="music-float-size-label">{label}</span>
+            <div className="music-float-size-ctrl">
+                <button className="music-float-size-btn" onClick={() => onChange(Math.max(min, value - step))} disabled={value <= min} aria-label={`减小${label}`}>−</button>
+                <span className="music-float-size-value">{value}</span>
+                <button className="music-float-size-btn" onClick={() => onChange(Math.min(max, value + step))} disabled={value >= max} aria-label={`增大${label}`}>+</button>
+            </div>
+        </div>
+    );
+}
 
 export default function MusicApp({ onClose }: Props) {
     const [tracks, setTracks] = useState<MusicTrack[]>([]);
@@ -1547,6 +1567,14 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
         setFloatMode(mode);
     };
 
+    // Backstage float sizes
+    const [floatSizes, setFloatSizes] = useState<MusicFloatSizes>(() => loadMusicFloatSizes());
+    const applyFloatSize = (key: keyof MusicFloatSizes, value: number) => {
+        const next = normalizeMusicFloatSizes({ ...floatSizes, [key]: value });
+        saveMusicFloatSizes(next);
+        setFloatSizes(next);
+    };
+
     const applyBg = (next: MusicBgConfig) => {
         const result = saveMusicBg(next);
         setBgMsg(result.ok ? null : result.message);
@@ -1769,6 +1797,49 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                         <button className="music-bg-mode" {...(floatMode === "both" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("both")}>同时显示</button>
                         <button className="music-bg-mode" {...(floatMode === "orb" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("orb")}>仅悬浮球</button>
                         <button className="music-bg-mode" {...(floatMode === "island" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("island")}>仅灵动岛</button>
+                    </div>
+
+                    <div className="music-float-size-grid">
+                        <FloatSizeStepper
+                            label="悬浮球大小"
+                            value={floatSizes.orb}
+                            min={MUSIC_FLOAT_SIZE_LIMITS.orb.min}
+                            max={MUSIC_FLOAT_SIZE_LIMITS.orb.max}
+                            step={MUSIC_FLOAT_SIZE_LIMITS.orb.step}
+                            onChange={(v) => applyFloatSize("orb", v)}
+                        />
+                        <FloatSizeStepper
+                            label="悬浮球卡片宽度"
+                            value={floatSizes.orbCardWidth}
+                            min={MUSIC_FLOAT_SIZE_LIMITS.orbCardWidth.min}
+                            max={MUSIC_FLOAT_SIZE_LIMITS.orbCardWidth.max}
+                            step={MUSIC_FLOAT_SIZE_LIMITS.orbCardWidth.step}
+                            onChange={(v) => applyFloatSize("orbCardWidth", v)}
+                        />
+                        <FloatSizeStepper
+                            label="悬浮球卡片高度"
+                            value={floatSizes.orbCardHeight}
+                            min={MUSIC_FLOAT_SIZE_LIMITS.orbCardHeight.min}
+                            max={MUSIC_FLOAT_SIZE_LIMITS.orbCardHeight.max}
+                            step={MUSIC_FLOAT_SIZE_LIMITS.orbCardHeight.step}
+                            onChange={(v) => applyFloatSize("orbCardHeight", v)}
+                        />
+                        <FloatSizeStepper
+                            label="灵动岛卡片宽度"
+                            value={floatSizes.islandWidth}
+                            min={MUSIC_FLOAT_SIZE_LIMITS.islandWidth.min}
+                            max={MUSIC_FLOAT_SIZE_LIMITS.islandWidth.max}
+                            step={MUSIC_FLOAT_SIZE_LIMITS.islandWidth.step}
+                            onChange={(v) => applyFloatSize("islandWidth", v)}
+                        />
+                        <FloatSizeStepper
+                            label="灵动岛卡片高度"
+                            value={floatSizes.islandHeight}
+                            min={MUSIC_FLOAT_SIZE_LIMITS.islandHeight.min}
+                            max={MUSIC_FLOAT_SIZE_LIMITS.islandHeight.max}
+                            step={MUSIC_FLOAT_SIZE_LIMITS.islandHeight.step}
+                            onChange={(v) => applyFloatSize("islandHeight", v)}
+                        />
                     </div>
                 </div>
 

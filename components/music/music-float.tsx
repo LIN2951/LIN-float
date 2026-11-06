@@ -3,7 +3,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMusicPlayerOptional, type MusicControlsValue } from "@/lib/music-context";
-import { MUSIC_FLOAT_MODE_EVENT, loadMusicFloatMode, type MusicFloatMode } from "@/lib/music-bg";
+import {
+    DEFAULT_MUSIC_FLOAT_SIZES,
+    MUSIC_FLOAT_MODE_EVENT,
+    MUSIC_FLOAT_SIZES_EVENT,
+    loadMusicFloatMode,
+    loadMusicFloatSizes,
+    type MusicFloatMode,
+    type MusicFloatSizes,
+} from "@/lib/music-bg";
 import {
     CloudLikeButton,
     DesktopLyricsButton,
@@ -14,7 +22,6 @@ import {
 /** Controls plus the high-frequency currentTime needed by the cards. */
 type MusicFloatPlayer = MusicControlsValue & { currentTime: number };
 
-const ORB_SIZE = 46;
 const ORB_SIDE_GAP = 10;
 const DRAG_START_THRESHOLD = 6;
 const TUCK_DELAY = 2800;
@@ -51,8 +58,10 @@ function WaveBars({ playing }: { playing?: boolean }) {
 
 function MusicFloatOrb({
     player,
+    sizes,
 }: {
     player: MusicFloatPlayer;
+    sizes: MusicFloatSizes;
 }) {
     const rootRef = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState({ x: 320, y: 620 });
@@ -73,10 +82,10 @@ function MusicFloatOrb({
         const parent = phoneScreenOf(el);
         if (!el || !parent) return { x, y };
         return {
-            x: clampValue(x, 0, parent.clientWidth - ORB_SIZE),
-            y: clampValue(y, 0, parent.clientHeight - ORB_SIZE),
+            x: clampValue(x, 0, parent.clientWidth - sizes.orb),
+            y: clampValue(y, 0, parent.clientHeight - sizes.orb),
         };
-    }, []);
+    }, [sizes.orb]);
 
     // Keep the orb inside the virtual phone, including after container resize.
     useEffect(() => {
@@ -148,10 +157,10 @@ function MusicFloatOrb({
             const parent = phoneScreenOf(rootRef.current);
             if (parent) {
                 const px = clampPos(d.origX + (e.clientX - d.startX), d.origY + (e.clientY - d.startY)).x;
-                const isLeft = px + ORB_SIZE / 2 < parent.clientWidth / 2;
+                const isLeft = px + sizes.orb / 2 < parent.clientWidth / 2;
                 setSide(isLeft ? "left" : "right");
                 setPos(prev => ({
-                    x: isLeft ? ORB_SIDE_GAP : parent.clientWidth - ORB_SIZE - ORB_SIDE_GAP,
+                    x: isLeft ? ORB_SIDE_GAP : parent.clientWidth - sizes.orb - ORB_SIDE_GAP,
                     y: prev.y,
                 }));
             }
@@ -160,7 +169,7 @@ function MusicFloatOrb({
 
         if (d.woke) return; // first tap only wakes the tucked orb
         setExpanded(v => !v);
-    }, [clampPos]);
+    }, [clampPos, sizes.orb]);
 
     const handleClose = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
@@ -186,7 +195,14 @@ function MusicFloatOrb({
             {...(tucked ? { "data-tucked": "" } : {})}
             {...(dragging ? { "data-dragging": "" } : {})}
             {...(dismissing ? { "data-dismissing": "" } : {})}
-            style={{ left: pos.x, top: pos.y }}
+            style={{
+                left: pos.x,
+                top: pos.y,
+                width: sizes.orb,
+                height: sizes.orb,
+                "--mf-card-w": `${sizes.orbCardWidth}px`,
+                "--mf-card-h": `${sizes.orbCardHeight}px`,
+            } as React.CSSProperties}
         >
             {expanded && (
                 <div className="music-float-island" data-side={side} onPointerDown={e => e.stopPropagation()}>
@@ -285,24 +301,34 @@ function MusicFloatOrb({
 
 function MusicFloatIsland({
     player,
+    sizes,
     lyricsVisible,
     onToggleLyrics,
 }: {
     player: MusicFloatPlayer;
+    sizes: MusicFloatSizes;
     lyricsVisible: boolean;
     onToggleLyrics: (e: React.MouseEvent) => void;
 }) {
     const [expanded, setExpanded] = useState(false); // false = pill, true = card
     const [closing, setClosing] = useState(false);
+    const [swipeHint, setSwipeHint] = useState<{ dir: "prev" | "next"; title: string } | null>(null);
     const retractTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const actionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const suppressClickRef = useRef(false);
+    const swipeRef = useRef({ active: false, x: 0, y: 0, moved: false });
 
     useEffect(() => () => {
         if (retractTimerRef.current) clearTimeout(retractTimerRef.current);
         if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+        if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+        if (actionTimerRef.current) clearTimeout(actionTimerRef.current);
     }, []);
 
     const expand = () => {
+        if (swipeRef.current.moved) return;
         if (closing) return;
         setExpanded(true);
     };
@@ -315,6 +341,67 @@ function MusicFloatIsland({
             setClosing(false);
             retractTimerRef.current = null;
         }, ISLAND_RETRACT_MS);
+    };
+
+    const neighborTrack = (dir: "prev" | "next") => {
+        const queue = player.queue;
+        if (!queue.length) return null;
+        const idx = queue.findIndex(t => t.id === player.currentTrack?.id);
+        if (idx < 0) return null;
+        return dir === "prev"
+            ? queue[(idx - 1 + queue.length) % queue.length]
+            : queue[(idx + 1) % queue.length];
+    };
+
+    const runSwipe = (dir: "prev" | "next") => {
+        const target = neighborTrack(dir);
+        setSwipeHint({ dir, title: target?.title || "" });
+        if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+        if (actionTimerRef.current) clearTimeout(actionTimerRef.current);
+        actionTimerRef.current = setTimeout(() => {
+            if (dir === "prev") player.prev();
+            else player.next();
+            actionTimerRef.current = null;
+        }, 140);
+        hintTimerRef.current = setTimeout(() => {
+            setSwipeHint(null);
+            hintTimerRef.current = null;
+        }, 1500);
+    };
+
+    const beginSwipe = (e: React.PointerEvent) => {
+        if (closing) return;
+        const target = e.target as HTMLElement;
+        const isPill = (e.currentTarget as HTMLElement).classList.contains("music-status-island");
+        if (!isPill && target.closest("button")) return;
+        swipeRef.current = { active: true, x: e.clientX, y: e.clientY, moved: false };
+        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    };
+
+    const moveSwipe = (e: React.PointerEvent) => {
+        const s = swipeRef.current;
+        if (!s.active) return;
+        const dx = e.clientX - s.x;
+        const dy = e.clientY - s.y;
+        if (Math.abs(dx) > 34 && Math.abs(dx) > Math.abs(dy)) s.moved = true;
+    };
+
+    const finishSwipe = (e: React.PointerEvent) => {
+        const s = swipeRef.current;
+        if (!s.active) return;
+        const el = e.currentTarget as HTMLElement;
+        if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
+        s.active = false;
+        if (!s.moved) return;
+        const dx = e.clientX - s.x;
+        if (Math.abs(dx) <= 34) return;
+        suppressClickRef.current = true;
+        // Left swipe = previous, right swipe = next (as requested).
+        runSwipe(dx < 0 ? "prev" : "next");
+        window.setTimeout(() => {
+            swipeRef.current.moved = false;
+            suppressClickRef.current = false;
+        }, 400);
     };
 
     const closePlayback = (e: React.MouseEvent) => {
@@ -335,20 +422,41 @@ function MusicFloatIsland({
     return (
         <div className="music-island-root">
             {!expanded && (
-                <button className="music-status-island" onClick={expand} title="展开音乐控制">
-                    <span className="music-status-island-cover">
-                        {player.currentTrack?.coverUrl ? (
-                            <img src={player.currentTrack.coverUrl} alt="" draggable={false} />
-                        ) : (
-                            <span className="music-float-cover-glyph">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                    <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
-                                </svg>
+                <button
+                    className="music-status-island"
+                    onClick={() => {
+                        if (suppressClickRef.current) { suppressClickRef.current = false; return; }
+                        expand();
+                    }}
+                    onPointerDown={beginSwipe}
+                    onPointerMove={moveSwipe}
+                    onPointerUp={finishSwipe}
+                    onPointerCancel={finishSwipe}
+                    title="展开音乐控制；左右滑动切换歌曲"
+                >
+                    {swipeHint ? (
+                        <span className="music-island-swipe-hint" data-dir={swipeHint.dir}>
+                            <span className="music-island-swipe-arrow">{swipeHint.dir === "prev" ? "‹" : "›"}</span>
+                            <span className="music-island-swipe-label">{swipeHint.dir === "prev" ? "上一首" : "下一首"}</span>
+                            <span className="music-island-swipe-title">{swipeHint.title}</span>
+                        </span>
+                    ) : (
+                        <>
+                            <span className="music-status-island-cover">
+                                {player.currentTrack?.coverUrl ? (
+                                    <img src={player.currentTrack.coverUrl} alt="" draggable={false} />
+                                ) : (
+                                    <span className="music-float-cover-glyph">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                            <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                                        </svg>
+                                    </span>
+                                )}
                             </span>
-                        )}
-                    </span>
-                    <span className="music-status-island-title">{player.currentTrack?.title}</span>
-                    <WaveBars playing={player.isPlaying} />
+                            <span className="music-status-island-title">{player.currentTrack?.title}</span>
+                            <WaveBars playing={player.isPlaying} />
+                        </>
+                    )}
                 </button>
             )}
 
@@ -358,7 +466,18 @@ function MusicFloatIsland({
                     <div
                         className="music-dynamic-island-panel"
                         {...(closing ? { "data-closing": "" } : {})}
-                        onClick={() => player.openFullPlayer()}
+                        style={{
+                            width: sizes.islandWidth,
+                            height: sizes.islandHeight,
+                        }}
+                        onClick={() => {
+                            if (suppressClickRef.current) { suppressClickRef.current = false; return; }
+                            player.openFullPlayer();
+                        }}
+                        onPointerDown={beginSwipe}
+                        onPointerMove={moveSwipe}
+                        onPointerUp={finishSwipe}
+                        onPointerCancel={finishSwipe}
                     >
                         <div className="music-dynamic-island-content">
                             <div className="music-dynamic-island-top">
@@ -386,7 +505,7 @@ function MusicFloatIsland({
                                 <span className="music-dynamic-island-time">{formatMusicTime(player.currentTime)}</span>
                                 <div
                                     className="music-dynamic-island-progress"
-                                    onClick={(e) => { e.stopPropagation(); seekFromEvent(e, player); }}
+                                    onClick={(e) => { e.stopPropagation(); if (suppressClickRef.current) return; seekFromEvent(e, player); }}
                                     role="progressbar"
                                     aria-valuemin={0}
                                     aria-valuemax={100}
@@ -415,6 +534,13 @@ function MusicFloatIsland({
                                 <CloudLikeButton player={player} />
                             </div>
                         </div>
+                        {swipeHint && (
+                            <div className="music-island-swipe-hint" data-dir={swipeHint.dir} data-overlay>
+                                <span className="music-island-swipe-arrow">{swipeHint.dir === "prev" ? "‹" : "›"}</span>
+                                <span className="music-island-swipe-label">{swipeHint.dir === "prev" ? "上一首" : "下一首"}</span>
+                                <span className="music-island-swipe-title">{swipeHint.title}</span>
+                            </div>
+                        )}
                     </div>
                 </>
             )}
@@ -429,14 +555,21 @@ function MusicFloatIsland({
 export default function MusicFloat({ hidden }: { hidden?: boolean }) {
     const player = useMusicPlayerOptional();
     const [mode, setMode] = useState<MusicFloatMode>("orb");
+    const [sizes, setSizes] = useState<MusicFloatSizes>(DEFAULT_MUSIC_FLOAT_SIZES);
     const [lyricsVisible, setLyricsVisible] = useState(false);
     const [lyricsLocked, setLyricsLocked] = useState(false);
 
     useEffect(() => {
         setMode(loadMusicFloatMode());
-        const onChange = () => setMode(loadMusicFloatMode());
-        window.addEventListener(MUSIC_FLOAT_MODE_EVENT, onChange);
-        return () => window.removeEventListener(MUSIC_FLOAT_MODE_EVENT, onChange);
+        setSizes(loadMusicFloatSizes());
+        const onModeChange = () => setMode(loadMusicFloatMode());
+        const onSizesChange = () => setSizes(loadMusicFloatSizes());
+        window.addEventListener(MUSIC_FLOAT_MODE_EVENT, onModeChange);
+        window.addEventListener(MUSIC_FLOAT_SIZES_EVENT, onSizesChange);
+        return () => {
+            window.removeEventListener(MUSIC_FLOAT_MODE_EVENT, onModeChange);
+            window.removeEventListener(MUSIC_FLOAT_SIZES_EVENT, onSizesChange);
+        };
     }, []);
 
     const toggleLyrics = useCallback((e: React.MouseEvent) => {
@@ -460,10 +593,10 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
     return (
         <>
             {active && !shouldHide && (mode === "orb" || mode === "both") && (
-                <MusicFloatOrb player={active} />
+                <MusicFloatOrb player={active} sizes={sizes} />
             )}
             {active && !shouldHide && (mode === "island" || mode === "both") && (
-                <MusicFloatIsland player={active} lyricsVisible={lyricsVisible} onToggleLyrics={toggleLyrics} />
+                <MusicFloatIsland player={active} sizes={sizes} lyricsVisible={lyricsVisible} onToggleLyrics={toggleLyrics} />
             )}
             <MusicDesktopLyrics
                 visible={lyricsVisible}
