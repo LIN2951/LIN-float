@@ -120,6 +120,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     // 递增的切歌 token：异步解析播放地址回来后若已不是最新一次切歌，就丢弃旧结果，
     // 避免「显示已切成下一首、声音却还是上一首」的错乱。
     const switchTokenRef = useRef(0);
+    // 引擎（<audio> / YT iframe）里「实际装载」的歌曲 id。只有当新地址真正装进
+    // 引擎后才更新。若它和 currentTrack 不一致，说明上一次切歌没有成功——此时
+    // 点播放绝不能把上一首恢复出来，而要重新装载显示中的这首歌。
+    const loadedTrackIdRef = useRef<string | null>(null);
 
     const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -179,7 +183,16 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             if (switchingRef.current) return; // 切歌过程中的暂停不算用户暂停
             setIsPlaying(false);
         });
-        audio.addEventListener("play", () => setIsPlaying(true));
+        audio.addEventListener("play", () => {
+            // 竞态保险：切歌失败后遗留的旧 src 若被意外恢复播放，立即停掉，
+            // 杜绝「显示新歌、声音却是上一首」。
+            const track = currentTrackRef.current;
+            if (!switchingRef.current && track && loadedTrackIdRef.current !== track.id) {
+                audio.pause();
+                return;
+            }
+            setIsPlaying(true);
+        });
         audio.addEventListener("error", () => {
             if (activeEngineRef.current !== "audio") return;
             const track = currentTrackRef.current;
@@ -387,6 +400,21 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         setDuration(track.duration || 0);
         setIsPlaying(true);
 
+        // 统一收尾：只有最新一次切歌有权改状态；失败时必须把「播放中」撤掉并提示，
+        // 绝不能把状态悬挂在「显示新歌、按钮播放中、声音却停在上一首」的错位上。
+        const finish = (message: string) => {
+            if (token !== switchTokenRef.current) return;
+            switchingRef.current = false;
+            setIsPlaying(false);
+            notifyPlaybackError(message);
+        };
+        // 给 audio 装载新地址时同步登记引擎里「实际装载」的歌曲 id，
+        // 供 togglePlay/resume 校验：装载不一致时禁止把上一首恢复播放。
+        const assignSrc = (value: string) => {
+            audio.src = value;
+            loadedTrackIdRef.current = track.id;
+        };
+
         // ── YouTube: hidden IFrame engine ──
         if (track.source === "youtube" || track.id.startsWith("yt_")) {
             activeEngineRef.current = "yt";
@@ -396,11 +424,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             try {
                 await ytEngine.load(videoId);
             } catch {
-                notifyPlaybackError("YouTube 播放器加载失败，请检查网络后重试");
-                if (token === switchTokenRef.current) setIsPlaying(false);
-            } finally {
-                switchingRef.current = false;
+                finish("YouTube 播放器加载失败，请检查网络后重试");
+                return;
             }
+            loadedTrackIdRef.current = track.id;
+            if (token === switchTokenRef.current) switchingRef.current = false;
             return;
         }
 
@@ -425,12 +453,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             }
             if (token !== switchTokenRef.current) return; // 期间又切了别的歌
             if (!playUrl) {
-                notifyPlaybackError("该歌曲暂无可用播放源");
-                switchingRef.current = false;
-                setIsPlaying(false);
+                finish("该歌曲暂无可用播放源");
                 return;
             }
-            audio.src = playUrl;
+            assignSrc(playUrl);
             // 从队列切歌时，队列里的歌可能还没有封面/歌词，这里补齐，
             // 保证灵动岛取色、歌词面板都能跟上当前歌曲。
             if (!track.coverUrl || !track.lyrics) {
@@ -456,45 +482,40 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             }
         } else if (track.source === "dlsite") {
             // Purchased MP3 bound to this link first; otherwise the trial clip.
-            const blob = await getAudioBlob(track.id);
+            const blob = await getAudioBlob(track.id).catch(() => null);
             if (token !== switchTokenRef.current) return;
             if (blob) {
                 const url = URL.createObjectURL(blob);
                 blobUrlRef.current = url;
-                audio.src = url;
+                assignSrc(url);
                 shouldMarkPlayed = true;
             } else if (track.sampleUrl) {
-                audio.src = track.sampleUrl;
+                assignSrc(track.sampleUrl);
             } else {
-                notifyPlaybackError("该 DLsite 作品没有试听片段，可上传购买的正版 MP3 绑定后播放");
-                switchingRef.current = false;
-                setIsPlaying(false);
+                finish("该 DLsite 作品没有试听片段，可上传购买的正版 MP3 绑定后播放");
                 return;
             }
         } else if (track.source === "reddit") {
             if (track.streamUrl) {
-                audio.src = track.streamUrl;
+                assignSrc(track.streamUrl);
             } else if (track.streamFallbackUrl) {
-                audio.src = track.streamFallbackUrl;
+                assignSrc(track.streamFallbackUrl);
                 fallbackTriedRef.current = true;
             } else {
-                notifyPlaybackError("该 Reddit 帖子没有可播放的音轨");
-                switchingRef.current = false;
-                setIsPlaying(false);
+                finish("该 Reddit 帖子没有可播放的音轨");
                 return;
             }
         } else {
             // Local tracks: load blob from IndexedDB
-            const blob = await getAudioBlob(track.id);
+            const blob = await getAudioBlob(track.id).catch(() => null);
             if (token !== switchTokenRef.current) return;
             if (!blob) {
-                switchingRef.current = false;
-                setIsPlaying(false);
+                finish("本地音频文件不存在或已被删除");
                 return;
             }
             const url = URL.createObjectURL(blob);
             blobUrlRef.current = url;
-            audio.src = url;
+            assignSrc(url);
             shouldMarkPlayed = true;
         }
 
@@ -511,10 +532,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             await audio.play();
             if (token === switchTokenRef.current) setIsPlaying(true);
         } catch {
-            // Autoplay blocked / 播放失败
+            // Autoplay blocked / 播放失败：撤掉乐观的「播放中」，不能悬挂
             if (token === switchTokenRef.current) setIsPlaying(false);
         } finally {
-            switchingRef.current = false;
+            // 只有最新一次切歌有权复位 switching 标记
+            if (token === switchTokenRef.current) switchingRef.current = false;
         }
     }, [cleanupBlobUrl, notifyPlaybackError]);
 
@@ -537,6 +559,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         cleanupBlobUrl();
         audio.pause();
         audio.src = url;
+        loadedTrackIdRef.current = track.id;
         setCurrentTrack(track);
         setCurrentTime(0);
         setDuration(track.duration || 0);
@@ -554,6 +577,14 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const resume = useCallback(() => {
+        // 与 togglePlay 同一套校验：切歌进行中忽略；装载错位时重新装载显示中的歌，
+        // 绝不能把上一首恢复播放（通知栏/锁屏媒体卡片的“播放”走这里）。
+        if (switchingRef.current) return;
+        const track = currentTrackRef.current;
+        if (track && loadedTrackIdRef.current !== track.id) {
+            loadAndPlayRef.current(track);
+            return;
+        }
         if (activeEngineRef.current === "yt") {
             ytEngine.play();
         } else {
@@ -562,6 +593,15 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const togglePlay = useCallback(() => {
+        // 切歌进行中：忽略点击，等切换完成后按钮状态自然正确。
+        if (switchingRef.current) return;
+        // 引擎里装载的不是当前显示的歌曲（上次切歌失败的遗留状态）：
+        // 绝不能把上一首恢复播放，而是重新装载显示中的这首歌。
+        const track = currentTrackRef.current;
+        if (track && loadedTrackIdRef.current !== track.id) {
+            loadAndPlayRef.current(track);
+            return;
+        }
         if (activeEngineRef.current === "yt") {
             if (isPlayingRef.current) ytEngine.pause();
             else ytEngine.play();
@@ -642,7 +682,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const stop = useCallback(() => {
+        ++switchTokenRef.current; // 作废在途切歌，防止 stop 之后迟到的播放把旧歌复活
         switchingRef.current = false;
+        loadedTrackIdRef.current = null;
         const audio = audioRef.current;
         if (audio) {
             audio.pause();
