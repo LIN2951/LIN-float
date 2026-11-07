@@ -186,6 +186,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         audio.addEventListener("play", () => {
             // 竞态保险：切歌失败后遗留的旧 src 若被意外恢复播放，立即停掉，
             // 杜绝「显示新歌、声音却是上一首」。
+            // 注意：currentTrackRef 必须在 setCurrentTrack 的同步位置就更新，
+            // 否则这里会读到旧歌 id、误把正在播的新歌暂停。
             const track = currentTrackRef.current;
             if (!switchingRef.current && track && loadedTrackIdRef.current !== track.id) {
                 audio.pause();
@@ -214,7 +216,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
         // Bridge the hidden YouTube IFrame engine into the same state shape.
         ytEngine.setCallbacks({
-            onPlaying: () => setIsPlaying(true),
+            onPlaying: () => {
+                // 与 audio 的 play 事件同一套校验：YT 里实际装载的歌曲若与
+                // 显示中的不一致（切歌失败的遗留），不能把 isPlaying 置 true。
+                const track = currentTrackRef.current;
+                if (track && loadedTrackIdRef.current !== track.id) return;
+                setIsPlaying(true);
+            },
             onPaused: () => { if (!switchingRef.current) setIsPlaying(false); },
             onTime: (t) => setCurrentTime(t),
             onDuration: (d) => setDuration(d),
@@ -394,7 +402,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
         // 先切换 UI（歌名/封面/进度立即变化），并乐观标记为「播放中」，
         // 保证切歌全程播放按钮一直是「暂停」（播放中）状态，不会闪现「播放」。
+        // 同步更新 currentTrackRef：audio 的 play 事件回调依赖它判断装载一致性，
+        // 若等 useEffect 异步更新，会误把正在播的新歌当成旧歌暂停。
         activeEngineRef.current = "audio";
+        currentTrackRef.current = track;
         setCurrentTrack(track);
         setCurrentTime(0);
         setDuration(track.duration || 0);
@@ -525,6 +536,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             track = { ...track, lastPlayedAt: playedAt };
         }
 
+        currentTrackRef.current = track;
         setCurrentTrack(track);
         setCurrentTime(0);
 
@@ -551,6 +563,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const playUrl = useCallback((url: string, track: MusicTrack) => {
         const audio = audioRef.current;
         if (!audio) return;
+        // 与 loadAndPlay 共享同一个切歌 token：若 loadAndPlay 还在途，
+        // 这里递增 token 后，loadAndPlay 回来的 assignSrc 会因 token 不匹配被丢弃，
+        // 避免「在线搜索播放被队列切歌的迟到结果覆盖」。
+        const token = ++switchTokenRef.current;
         setFloatDismissed(false);
         activeEngineRef.current = "audio";
         ytEngine.pause();
@@ -560,12 +576,16 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         audio.pause();
         audio.src = url;
         loadedTrackIdRef.current = track.id;
+        currentTrackRef.current = track;
         setCurrentTrack(track);
         setCurrentTime(0);
         setDuration(track.duration || 0);
         audio.play()
             .catch(() => {})
-            .finally(() => { switchingRef.current = false; });
+            .finally(() => {
+                // 只有最新一次切歌（含 playUrl）有权复位 switching
+                if (token === switchTokenRef.current) switchingRef.current = false;
+            });
     }, [cleanupBlobUrl]);
 
     const pause = useCallback(() => {
@@ -685,6 +705,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         ++switchTokenRef.current; // 作废在途切歌，防止 stop 之后迟到的播放把旧歌复活
         switchingRef.current = false;
         loadedTrackIdRef.current = null;
+        currentTrackRef.current = null;
         const audio = audioRef.current;
         if (audio) {
             audio.pause();
