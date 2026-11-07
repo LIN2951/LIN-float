@@ -47,6 +47,17 @@ export function saveLockScreenSettings(settings: LockScreenSettings): void {
         kvSet(LOCK_SCREEN_KEY, JSON.stringify(settings));
     } catch { /* ignore */ }
     if (typeof window !== "undefined") {
+        // 隐藏锁屏需要在下次加载时「零停顿」跳过锁屏。KV 是异步的，等 hydrate 完
+        // 再判断会先闪一下锁屏；这里同步镜像一份到 localStorage，首帧即可读取。
+        try { localStorage.setItem(LOCK_SCREEN_HIDDEN_SYNC_KEY, settings.hidden ? "1" : "0"); } catch { /* ignore */ }
         window.dispatchEvent(new CustomEvent(LOCK_SCREEN_EVENT));
     }
+}
+
+const LOCK_SCREEN_HIDDEN_SYNC_KEY = "ai_phone_lockscreen_hidden_sync";
+
+/** 同步读取「隐藏锁屏」开关（首帧即可用，用于跳过锁屏渲染）。 */
+export function loadLockScreenHiddenSync(): boolean {
+    if (typeof window === "undefined") return false;
+    try { return localStorage.getItem(LOCK_SCREEN_HIDDEN_SYNC_KEY) === "1"; } catch { return false; }
 }

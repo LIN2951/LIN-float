@@ -3,13 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp } from "lucide-react";
 
-import {
-    DEFAULT_LOCK_SCREEN_SETTINGS,
-    LOCK_SCREEN_EVENT,
-    loadLockScreenSettings,
-    type LockScreenSettings,
-} from "@/lib/lockscreen-settings";
-
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"] as const;
 const ENTER_THRESHOLD = 72;
 
@@ -27,26 +20,17 @@ function useNow() {
 }
 
 /**
- * 锁屏（进入页）：氛围感壁纸锁屏。
- * - 支持自定义上传壁纸（在「主题 → 锁屏」里设置），默认是奶油粉 × 雾蓝氛围底
- * - 大号衬线时钟 + 日期 + 一句话签名
+ * 锁屏（进入页）：极简进入页。
+ * - 无壁纸、无签名，只保留时钟 + 日期 + 上滑进入
  * - 上滑（带跟手位移）或点击底部按钮进入桌面
- * - 设置读取放在 hydration 之后，避免首次渲染拿不到已保存的壁纸
+ * - 若用户在「外观 → 锁屏」里开启隐藏锁屏，主应用会在首帧就跳过本组件，
+ *   全程不渲染，直接进桌面。
  */
 export function LockScreen({ ready = false, onEnter }: { ready?: boolean; onEnter?: () => void }) {
     const now = useNow();
-    const [settings, setSettings] = useState<LockScreenSettings>(() => ({ ...DEFAULT_LOCK_SCREEN_SETTINGS }));
     const [drag, setDrag] = useState(0);
     const [dragging, setDragging] = useState(false);
     const gestureRef = useRef({ y: 0, active: false });
-
-    // 关键修复：等 KV 完成 hydrate（ready=true）后再读取，且跟随设置弹窗实时刷新
-    useEffect(() => {
-        const refresh = () => setSettings(loadLockScreenSettings());
-        refresh();
-        window.addEventListener(LOCK_SCREEN_EVENT, refresh);
-        return () => window.removeEventListener(LOCK_SCREEN_EVENT, refresh);
-    }, [ready]);
 
     const tryEnter = () => {
         if (!ready) return;
@@ -90,12 +74,9 @@ export function LockScreen({ ready = false, onEnter }: { ready?: boolean; onEnte
         setDrag(0);
     };
 
-    const hasWallpaper = Boolean(settings.wallpaper);
-
     return (
         <div
             className="lock-screen"
-            data-variant={hasWallpaper ? "custom" : "default"}
             data-ready={ready ? "true" : "false"}
             data-dragging={dragging ? "true" : "false"}
             style={{ "--lock-drag": `${drag}px`, "--lock-drag-ratio": drag / 240 } as React.CSSProperties}
@@ -106,14 +87,10 @@ export function LockScreen({ ready = false, onEnter }: { ready?: boolean; onEnte
             role="button"
             aria-label={ready ? "上滑或点击进入桌面" : "加载中"}
         >
-            {hasWallpaper ? (
-                <div className="lock-screen-wall" style={{ backgroundImage: `url(${settings.wallpaper})` }} />
-            ) : (
-                <div className="lock-screen-wall lock-screen-default-wall">
-                    <span className="lock-screen-bokeh lock-screen-bokeh-a" />
-                    <span className="lock-screen-bokeh lock-screen-bokeh-b" />
-                </div>
-            )}
+            <div className="lock-screen-wall lock-screen-default-wall">
+                <span className="lock-screen-bokeh lock-screen-bokeh-a" />
+                <span className="lock-screen-bokeh lock-screen-bokeh-b" />
+            </div>
             <div className="lock-screen-dim" />
 
             <div className="lock-screen-content">
@@ -128,12 +105,6 @@ export function LockScreen({ ready = false, onEnter }: { ready?: boolean; onEnte
                         {pad2(now.getHours())}:{pad2(now.getMinutes())}
                     </span>
                 </div>
-
-                {settings.signature.trim() ? (
-                    <div className="lock-screen-signature-wrap">
-                        <div className="lock-screen-signature">{settings.signature}</div>
-                    </div>
-                ) : null}
 
                 <div className="lock-screen-flex" />
 

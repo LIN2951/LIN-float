@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 
 import { AccountGate } from "@/components/auth/account-gate";
 import { CloudBackupScheduler } from "@/components/cloud-backup-scheduler";
@@ -11,7 +11,7 @@ import { OfflinePushRevampAnnouncement } from "./offline-push-revamp-announcemen
 import { LockScreen } from "./lock-screen";
 import { MusicProvider } from "@/lib/music-context";
 import { hydrateKvDb, isKvHydrated } from "@/lib/kv-db";
-import { loadLockScreenSettings } from "@/lib/lockscreen-settings";
+import { loadLockScreenHiddenSync, loadLockScreenSettings } from "@/lib/lockscreen-settings";
 import { getThemeAssetMap, readThemeProfile } from "@/lib/theme-storage";
 import { resolveActiveIconSkins, type ThemeProfile } from "@/lib/theme-types";
 import { hasPendingMcpOAuthCallback } from "@/lib/tool-executor";
@@ -223,6 +223,12 @@ export function MainApp() {
   const [splashDismissed, setSplashDismissed] = useState(false);
   const [kvHydrateFailed, setKvHydrateFailed] = useState(false);
   const [initAttempt, setInitAttempt] = useState(0);
+
+  // 「隐藏锁屏」要在浏览器绘制前就跳过锁屏，才能做到无闪现、丝滑进桌面。
+  // 用 useLayoutEffect 读同步 localStorage（首帧即可用），又不会造成 hydration 不一致。
+  useLayoutEffect(() => {
+    if (loadLockScreenHiddenSync()) setSplashDismissed(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

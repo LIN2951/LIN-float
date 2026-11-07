@@ -56,7 +56,6 @@ import {
 import { BINDING_ACCENTS } from "@/lib/ui-accent-colors";
 import { ConfirmDialog, ContentDialog } from "@/components/ui/modal";
 import { loadLockScreenSettings, saveLockScreenSettings, type LockScreenSettings } from "@/lib/lockscreen-settings";
-import { fileToCompressedDataUrl } from "@/lib/music-bg";
 import type { DIYWidgetTemplate } from "@/lib/widget-types";
 import { DIYWidgetEditor } from "@/components/widgets/diy-widget-editor";
 import {
@@ -222,8 +221,6 @@ export function PhoneThemeApp({
   const [showTextAdjust, setShowTextAdjust] = useState(false);
   const [showLockPanel, setShowLockPanel] = useState(false);
   const [lockSettings, setLockSettings] = useState<LockScreenSettings>(() => loadLockScreenSettings());
-  const lockWallpaperFileRef = useRef<HTMLInputElement>(null);
-  const [lockBusy, setLockBusy] = useState(false);
   const [showThemeTransfer, setShowThemeTransfer] = useState(false);
   const [themeTransferBusy, setThemeTransferBusy] = useState(false);
   const [showThemePresets, setShowThemePresets] = useState(false);
@@ -249,21 +246,6 @@ export function PhoneThemeApp({
       return next;
     });
   }, []);
-
-  const handleLockWallpaperFile = useCallback(async (file: File | null) => {
-    if (!file) return;
-    setLockBusy(true);
-    try {
-      const dataUrl = await fileToCompressedDataUrl(file, 1600, 0.84);
-      updateLockSettings({ wallpaper: dataUrl });
-      onNotice("锁屏壁纸已更新");
-    } catch {
-      onNotice("图片读取失败，请换一张图片后重试");
-    } finally {
-      setLockBusy(false);
-      if (lockWallpaperFileRef.current) lockWallpaperFileRef.current.value = "";
-    }
-  }, [onNotice, updateLockSettings]);
 
   const handleSaveThemePreset = useCallback(() => {
     try {
@@ -883,38 +865,6 @@ export function PhoneThemeApp({
           onCancel={() => setShowLockPanel(false)}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {/* 锁屏壁纸预览 */}
-            <div
-              style={{
-                position: "relative",
-                width: "100%",
-                aspectRatio: "9 / 16",
-                maxHeight: 260,
-                borderRadius: 16,
-                overflow: "hidden",
-                background: lockSettings.wallpaper
-                  ? `center / cover no-repeat url(${lockSettings.wallpaper})`
-                  : "linear-gradient(158deg, #fdeef4 0%, #e9efff 52%, #fdf6ec 100%)",
-                boxShadow: "0 8px 24px rgba(90, 80, 120, 0.18)",
-              }}
-            >
-              <div style={{
-                position: "absolute", inset: 0,
-                background: "linear-gradient(180deg, rgba(24,18,32,0.14) 0%, rgba(24,18,32,0.02) 34%, rgba(24,18,32,0.30) 100%)",
-              }} />
-              <div style={{
-                position: "absolute", top: "16%", left: 0, right: 0, textAlign: "center",
-                color: lockSettings.wallpaper ? "#fff" : "#35303f",
-                textShadow: lockSettings.wallpaper ? "0 1px 12px rgba(0,0,0,0.35)" : "none",
-              }}>
-                <div style={{ fontSize: "calc(10px*var(--app-text-scale,1))", letterSpacing: "0.3em", opacity: 0.78 }}>{"11月6日 · 周五"}</div>
-                <div style={{ fontFamily: '"Instrument Serif", Georgia, serif', fontSize: 52, lineHeight: 1.1, marginTop: 4 }}>{"22:34"}</div>
-                {lockSettings.signature.trim() ? (
-                  <div style={{ fontSize: "calc(10px*var(--app-text-scale,1))", letterSpacing: "0.14em", opacity: 0.7, marginTop: 8 }}>{lockSettings.signature}</div>
-                ) : null}
-              </div>
-            </div>
-
             {/* 隐藏锁屏开关 */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: "calc(13px*var(--app-text-scale,1))", color: "var(--c-text)" }}>{"隐藏锁屏"}</span>
@@ -930,57 +880,8 @@ export function PhoneThemeApp({
               </label>
             </div>
             <p style={{ fontSize: "calc(11px*var(--app-text-scale,1))", color: "var(--c-icon)", lineHeight: 1.5, marginTop: -8 }}>
-              {"开启后打开应用会跳过锁屏、直接进入桌面，下次启动生效。"}
+              {"开启后打开应用会丝滑跳过锁屏、直接进入桌面；关闭后恢复锁屏页面。"}
             </p>
-
-            {/* 壁纸操作 */}
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                type="button"
-                className="ui-btn"
-                data-ui="btn"
-                disabled={lockBusy}
-                onClick={() => lockWallpaperFileRef.current?.click()}
-                style={{ flex: 1 }}
-              >
-                {lockBusy ? "处理中…" : "上传锁屏图片"}
-              </button>
-              {lockSettings.wallpaper ? (
-                <button
-                  type="button"
-                  className="ui-btn"
-                  data-ui="btn"
-                  onClick={() => updateLockSettings({ wallpaper: null })}
-                  style={{ flex: 1 }}
-                >
-                  {"恢复默认氛围底"}
-                </button>
-              ) : null}
-            </div>
-            <input
-              ref={lockWallpaperFileRef}
-              type="file"
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={(e) => { void handleLockWallpaperFile(e.target.files?.[0] ?? null); }}
-            />
-
-            {/* 签名 */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: "calc(13px*var(--app-text-scale,1))", color: "var(--c-text)" }}>{"锁屏签名"}</span>
-              <input
-                type="text"
-                value={lockSettings.signature}
-                maxLength={30}
-                placeholder={"写一句话，留在锁屏上"}
-                onChange={(e) => updateLockSettings({ signature: e.target.value })}
-                className="ui-input"
-                data-ui="input"
-              />
-              <p style={{ fontSize: "calc(11px*var(--app-text-scale,1))", color: "var(--c-icon)", lineHeight: 1.5 }}>
-                {"显示在时间下方；清空则不显示。"}
-              </p>
-            </div>
           </div>
         </ContentDialog>,
         document.querySelector(".phone-shell") ?? document.body

@@ -1959,6 +1959,40 @@
     flex-shrink: 0;
 }
 
+/* GD音乐页 */
+.music-gd-banner {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin: 14px 20px 2px;
+}
+
+.music-gd-banner-title {
+    font-size: calc(16px*var(--app-text-scale,1));
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    background: linear-gradient(100deg, var(--c-music-accent, #b49de8), #7fd4c1);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.music-gd-banner-sub {
+    font-size: calc(11px*var(--app-text-scale,1));
+    color: var(--c-music-icon, var(--c-icon));
+}
+
+.music-gd-source {
+    flex-shrink: 0;
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: calc(10px*var(--app-text-scale,1));
+    color: var(--c-music-accent, #b49de8);
+    border: 1px solid color-mix(in srgb, var(--c-music-accent, #b49de8) 45%, transparent);
+    border-radius: 999px;
+    opacity: 0.9;
+}
+
 .music-search-input {
     flex: 1;
     background: none;

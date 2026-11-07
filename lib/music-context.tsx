@@ -5,7 +5,7 @@ import { createContext, useContext, useState, useRef, useCallback, useEffect, us
 import type { MusicTrack } from "./music-storage";
 import { getAudioBlob, markTrackPlayed } from "./music-storage";
 import { findPlayableMatch, getNeteaseLyrics, getNeteasePlayUrl, getNeteasePlayInfo, getNeteaseSongDetail, loadMusicSourceConfig } from "./music-service";
-import { getFreePlayUrl } from "./music-free-source";
+import { getFreePlayUrl, resolveFreeServerUrl } from "./music-free-source";
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { registerMusicControlBridge } from "./music-control-bridge";
 import { applyMusicTheme, loadMusicTheme, MUSIC_THEME_EVENT } from "./music-bg";
@@ -470,6 +470,20 @@ export function MusicProvider({ children }: { children: ReactNode }) {
                 switchingRef.current = false;
                 return;
             }
+        } else if (track.id.startsWith("gd_")) {
+            // GD音乐：免费多平台直链。id 形如 gd_<server>:<songId>，按需实时解析。
+            const rest = track.id.slice(3);
+            const sep = rest.indexOf(":");
+            const server = sep > 0 ? rest.slice(0, sep) : "netease";
+            const sid = sep > 0 ? rest.slice(sep + 1) : rest;
+            const direct = await resolveFreeServerUrl(server, sid, track.title, track.artist);
+            if (!direct) {
+                notifyPlaybackError("该歌曲暂无可用免费源，换一首试试");
+                switchingRef.current = false;
+                setIsPlaying(false);
+                return;
+            }
+            audio.src = direct;
         } else {
             // Local tracks: load blob from IndexedDB
             const blob = await getAudioBlob(track.id);
