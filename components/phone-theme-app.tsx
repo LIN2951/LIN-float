@@ -242,6 +242,42 @@ export function PhoneThemeApp({
     setShowThemePresets(true);
   }, [draft.name]);
 
+  const enterPhoneFullscreen = useCallback(async () => {
+    if (typeof document === "undefined") return;
+    writePwaDisplayPreference("fullscreen");
+    setSystemBarShown(false);
+    if (document.fullscreenElement) {
+      onNotice("已经处于沉浸全屏状态");
+      return;
+    }
+    const el = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+    };
+    try {
+      if (el.requestFullscreen) {
+        await el.requestFullscreen({ navigationUI: "hide" });
+      } else if (el.webkitRequestFullscreen) {
+        await el.webkitRequestFullscreen();
+      } else {
+        onNotice("当前浏览器不支持全屏，请把页面「添加到主屏幕」后再打开");
+        return;
+      }
+      onNotice("已进入沉浸全屏，手机状态栏已隐藏");
+    } catch {
+      onNotice("浏览器拒绝了全屏请求，请把页面添加到主屏幕后重试");
+    }
+  }, [onNotice]);
+
+  const exitPhoneFullscreen = useCallback(async () => {
+    if (typeof document === "undefined") return;
+    writePwaDisplayPreference("standalone");
+    setSystemBarShown(true);
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+    } catch { /* ignore */ }
+    onNotice("已退出全屏，手机系统状态栏会重新显示");
+  }, [onNotice]);
+
   const updateLockSettings = useCallback((patch: Partial<LockScreenSettings>) => {
     setLockSettings(prev => {
       const next = { ...prev, ...patch };
@@ -437,7 +473,14 @@ export function PhoneThemeApp({
                         <input
                           type="checkbox"
                           checked={!draft.hideTopBar}
-                          onChange={(e) => { const next = { ...draft, hideTopBar: !e.target.checked }; onDraftChange(next); onApply(next); }}
+                          onChange={(e) => {
+                            const shown = e.target.checked;
+                            const next = { ...draft, hideTopBar: !shown };
+                            onDraftChange(next);
+                            onApply(next);
+                            if (shown) void exitPhoneFullscreen();
+                            else void enterPhoneFullscreen();
+                          }}
                           className="w-full h-full rounded-[11px] m-0 outline-none"
                           style={{
                             appearance: "none",
@@ -774,11 +817,8 @@ export function PhoneThemeApp({
                   type="checkbox"
                   checked={systemBarShown}
                   onChange={(e) => {
-                    const shown = e.target.checked;
-                    setSystemBarShown(shown);
-                    writePwaDisplayPreference(shown ? "standalone" : "fullscreen");
-                    if (shown && document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
-                    onNotice(shown ? "已开启系统状态栏，重新添加到桌面后完全生效" : "已恢复沉浸全屏，重新添加到桌面后完全生效");
+                    if (e.target.checked) void exitPhoneFullscreen();
+                    else void enterPhoneFullscreen();
                   }}
                   className="w-full h-full rounded-[11px] m-0 outline-none"
                   style={{ appearance: "none", backgroundColor: systemBarShown ? "var(--c-success)" : "var(--c-page-body-bg)", border: systemBarShown ? "none" : "1px solid var(--c-input-border)", transition: "0.2s" }}
@@ -786,6 +826,29 @@ export function PhoneThemeApp({
                 <div className="absolute w-[18px] h-[18px] bg-white rounded-full top-[2px] pointer-events-none" style={{ left: systemBarShown ? 20 : 2, transition: "0.2s", boxShadow: "0 2px 4px rgba(0,0,0,0.15)" }} />
               </label>
             </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => { void enterPhoneFullscreen(); }}
+                style={{
+                  flex: 1, height: 36, borderRadius: 12, border: "none",
+                  background: "var(--c-success)", color: "#fff",
+                  fontSize: "calc(12px*var(--app-text-scale,1))", fontWeight: 600, cursor: "pointer",
+                }}
+              >{"立即进入全屏"}</button>
+              <button
+                type="button"
+                onClick={() => { void exitPhoneFullscreen(); }}
+                style={{
+                  flex: 1, height: 36, borderRadius: 12, border: "1px solid var(--c-input-border)",
+                  background: "var(--c-input)", color: "var(--c-text)", cursor: "pointer",
+                  fontSize: "calc(12px*var(--app-text-scale,1))",
+                }}
+              >{"退出全屏"}</button>
+            </div>
+            <p style={{ fontSize: "calc(11px*var(--app-text-scale,1))", color: "var(--c-icon)", lineHeight: 1.4 }}>
+              {"点「立即进入全屏」会隐藏手机自带的状态栏（时间/电量/信号），float 页面从上到下铺满整块屏幕、没有留白。部分浏览器需要在全屏手势下才能生效；装到桌面后由系统全屏模式接管。"}
+            </p>
             <p style={{ fontSize: "calc(11px*var(--app-text-scale,1))", color: "var(--c-icon)", lineHeight: 1.4 }}>
               {"显示手机系统自己的状态栏（时间/电量/通知），退出沉浸全屏，安卓不再反复弹全屏提示。开启后本页的虚拟状态栏不再显示；已装到桌面的需删除后重新「添加到主屏幕」才完全生效。"}
             </p>

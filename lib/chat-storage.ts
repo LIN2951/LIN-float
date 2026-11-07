@@ -55,6 +55,8 @@ export type ChatSession = {
     userAvatarOverride?: string;
     /** 仅当前私聊里展示的角色头像；不修改角色资料、剧情、动态或其他会话 */
     characterAvatarOverride?: string;
+    /** 群聊自定义头像（data URL），设置后列表与群聊页优先展示它 */
+    groupAvatar?: string;
     /** 用户更换当前会话头像后是否通知角色。未设置时默认开启 */
     notifyCharacterOnUserAvatarChange?: boolean;
     /** 角色给用户设置的私聊备注；会显示在“查手机”的真实私聊列表中。 */
@@ -1387,6 +1389,23 @@ export function saveChatSessions(sessions: ChatSession[]) {
     }
     if (normalized.changed || redirectedMessages > 0 || refreshed.changed) dbReplaceSessions(refreshed.items);
     else dbPutSessions(refreshed.items);
+}
+
+/** 局部更新一个会话（置顶、自定义头像等），并通知列表刷新 */
+export function patchChatSession(sessionId: string, patch: Partial<ChatSession>): ChatSession | null {
+    const sessions = loadChatSessions();
+    let updated: ChatSession | null = null;
+    const next = sessions.map(session => {
+        if (session.id !== sessionId) return session;
+        updated = { ...session, ...patch };
+        return updated;
+    });
+    if (!updated) return null;
+    saveChatSessions(next);
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("chat-messages-updated"));
+    }
+    return updated;
 }
 
 export function createOrGetSession(contactId: string, chatAccountId: string | null = loadChatScope().chatAccountId): ChatSession {

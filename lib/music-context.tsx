@@ -152,6 +152,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         const audio = new Audio();
         audio.volume = 0.8;
+        audio.preload = "auto";
+        audio.setAttribute("playsinline", "");
+        // 常驻 DOM（隐藏），安卓 Chrome 更容易识别为「正在播放」并生成下拉通知栏媒体卡片
+        audio.style.display = "none";
+        try { document.body.appendChild(audio); } catch { /* ignore */ }
         audioRef.current = audio;
 
         audio.addEventListener("timeupdate", () => {
@@ -206,6 +211,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         return () => {
             audio.pause();
             audio.src = "";
+            try { audio.remove(); } catch { /* ignore */ }
             if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
             ytEngine.stop();
         };
@@ -233,6 +239,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         };
         bind("play", () => mediaActionsRef.current.resume());
         bind("pause", () => mediaActionsRef.current.pause());
+        bind("stop", () => mediaActionsRef.current.pause());
         bind("nexttrack", () => mediaActionsRef.current.next());
         bind("previoustrack", () => mediaActionsRef.current.prevTrack());
         bind("seekto", (details) => {
@@ -252,6 +259,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         return () => {
             bind("play", null);
             bind("pause", null);
+            bind("stop", null);
             bind("nexttrack", null);
             bind("previoustrack", null);
             bind("seekto", null);
@@ -399,6 +407,29 @@ export function MusicProvider({ children }: { children: ReactNode }) {
                 return;
             }
             audio.src = playUrl;
+            // 从队列切歌时，队列里的歌可能还没有封面/歌词，这里补齐，
+            // 保证灵动岛取色、歌词面板都能跟上当前歌曲。
+            if (!track.coverUrl || !track.lyrics) {
+                void Promise.all([
+                    getNeteaseSongDetail(nid).catch(() => null),
+                    getNeteaseLyrics(nid).catch(() => ""),
+                ]).then(([detail, lyrics]) => {
+                    const patch: Partial<MusicTrack> = {};
+                    if (detail?.coverUrl && !track.coverUrl) patch.coverUrl = detail.coverUrl;
+                    if (detail?.name) patch.title = detail.name;
+                    if (detail?.artists) patch.artist = detail.artists;
+                    if (lyrics && !track.lyrics) patch.lyrics = lyrics;
+                    if (Object.keys(patch).length === 0) return;
+                    setCurrentTrack(prev => (prev && prev.id === track.id ? { ...prev, ...patch } : prev));
+                    setQueueRaw(prev => {
+                        const nextQueue = prev.map(item => (
+                            item.id === track.id ? { ...item, ...patch } : item
+                        ));
+                        persistQueue(nextQueue);
+                        return nextQueue;
+                    });
+                });
+            }
         } else if (track.source === "dlsite") {
             // Purchased MP3 bound to this link first; otherwise the trial clip.
             const blob = await getAudioBlob(track.id);
@@ -514,12 +545,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
     const next = useCallback(() => {
         if (queue.length === 0 || !currentTrack) return;
+        // 当前歌曲不在队列里（例如链接点播）时，从队列第一首开始播
         const idx = queue.findIndex(t => t.id === currentTrack.id);
         let nextIdx: number;
         if (playMode === "shuffle") {
             nextIdx = Math.floor(Math.random() * queue.length);
         } else {
-            nextIdx = (idx + 1) % queue.length;
+            nextIdx = idx < 0 ? 0 : (idx + 1) % queue.length;
         }
         loadAndPlay(queue[nextIdx]);
     }, [queue, currentTrack, playMode, loadAndPlay]);
@@ -547,7 +579,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         const idx = queue.findIndex(t => t.id === currentTrack.id);
         const prevIdx = playMode === "shuffle"
             ? Math.floor(Math.random() * queue.length)
-            : (idx - 1 + queue.length) % queue.length;
+            : idx < 0
+                ? queue.length - 1
+                : (idx - 1 + queue.length) % queue.length;
         loadAndPlay(queue[prevIdx]);
     }, [queue, currentTrack, playMode, loadAndPlay]);
 

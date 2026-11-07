@@ -22,6 +22,15 @@ import {
     MusicDesktopLyrics,
     formatMusicTime,
 } from "./music-desktop-lyrics";
+import {
+    DEFAULT_MUSIC_ISLAND_COLOR,
+    MUSIC_ISLAND_COLOR_EVENT,
+    hexToRgba,
+    islandColorValue,
+    loadMusicIslandColor,
+    resolveTrackAccent,
+    type MusicIslandColorSettings,
+} from "@/lib/music-island-color";
 
 /** Controls plus the high-frequency currentTime needed by the cards. */
 type MusicFloatPlayer = MusicControlsValue & { currentTime: number };
@@ -63,9 +72,15 @@ function WaveBars({ playing }: { playing?: boolean }) {
 function MusicFloatOrb({
     player,
     sizes,
+    hideWave,
+    accent,
+    accentSoft,
 }: {
     player: MusicFloatPlayer;
     sizes: MusicFloatSizes;
+    hideWave?: boolean;
+    accent?: string;
+    accentSoft?: string;
 }) {
     const rootRef = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState({ x: 320, y: 620 });
@@ -206,6 +221,8 @@ function MusicFloatOrb({
                 height: sizes.orb,
                 "--mf-card-w": `${sizes.orbCardWidth}px`,
                 "--mf-card-h": `${sizes.orbCardHeight}px`,
+                "--mi-accent": accent || "#ffffff",
+                "--mi-accent-soft": accentSoft || "rgba(255, 255, 255, 0.08)",
             } as React.CSSProperties}
         >
             {expanded && (
@@ -233,7 +250,7 @@ function MusicFloatOrb({
                             <div className="music-float-artist">{player.currentTrack?.artist}</div>
                         </div>
 
-                        <WaveBars playing={player.isPlaying} />
+                        {!hideWave && <WaveBars playing={player.isPlaying} />}
                     </div>
 
                     <div className="music-float-progress-row">
@@ -252,7 +269,7 @@ function MusicFloatOrb({
                     </div>
 
                     <div className="music-float-card-controls">
-                        <button className="music-float-ctrl" onClick={(e) => { e.stopPropagation(); player.prev(); }} title="上一首">
+                        <button className="music-float-ctrl" onClick={(e) => { e.stopPropagation(); player.prevTrack(); }} title="上一首">
                             <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
                         </button>
                         <button className="music-float-ctrl music-float-ctrl-play" onClick={(e) => { e.stopPropagation(); player.togglePlay(); }} title={player.isPlaying ? "暂停" : "播放"}>
@@ -287,7 +304,7 @@ function MusicFloatOrb({
                         </svg>
                     </span>
                 )}
-                <span className="music-float-orb-wave"><WaveBars playing={player.isPlaying} /></span>
+                {!hideWave && <span className="music-float-orb-wave"><WaveBars playing={player.isPlaying} /></span>}
             </div>
 
             {expanded && (
@@ -308,11 +325,17 @@ function MusicFloatIsland({
     sizes,
     lyricsVisible,
     onToggleLyrics,
+    hideWave,
+    accent,
+    accentSoft,
 }: {
     player: MusicFloatPlayer;
     sizes: MusicFloatSizes;
     lyricsVisible: boolean;
     onToggleLyrics: (e: React.MouseEvent) => void;
+    hideWave?: boolean;
+    accent?: string;
+    accentSoft?: string;
 }) {
     const [expanded, setExpanded] = useState(false); // false = pill, true = card
     const [closing, setClosing] = useState(false);
@@ -322,7 +345,7 @@ function MusicFloatIsland({
     const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const actionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const suppressClickRef = useRef(false);
-    const swipeRef = useRef({ active: false, x: 0, y: 0, moved: false });
+    const swipeRef = useRef({ active: false, x: 0, y: 0, dx: 0, moved: false, pointerId: 0, captured: false });
 
     useEffect(() => () => {
         if (retractTimerRef.current) clearTimeout(retractTimerRef.current);
@@ -351,7 +374,7 @@ function MusicFloatIsland({
         const queue = player.queue;
         if (!queue.length) return null;
         const idx = queue.findIndex(t => t.id === player.currentTrack?.id);
-        if (idx < 0) return null;
+        if (idx < 0) return queue[dir === "prev" ? queue.length - 1 : 0];
         return dir === "prev"
             ? queue[(idx - 1 + queue.length) % queue.length]
             : queue[(idx + 1) % queue.length];
@@ -377,35 +400,67 @@ function MusicFloatIsland({
         if (closing) return;
         const target = e.target as HTMLElement;
         const isPill = (e.currentTarget as HTMLElement).classList.contains("music-status-island");
-        if (!isPill && target.closest("button")) return;
-        swipeRef.current = { active: true, x: e.clientX, y: e.clientY, moved: false };
-        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        // 收起状态的灵动岛本身就是 button，滑动要照常生效；
+        // 展开卡片里的按钮（词/上一首/播放/下一首/爱心/关闭）由它们自己处理点击，不参与滑动切歌。
+        if (!isPill && target.closest("button")) {
+            swipeRef.current = { active: false, x: 0, y: 0, dx: 0, moved: false, pointerId: 0, captured: false };
+            return;
+        }
+        swipeRef.current = {
+            active: true,
+            x: e.clientX,
+            y: e.clientY,
+            dx: 0,
+            moved: false,
+            pointerId: e.pointerId,
+            captured: false,
+        };
+        // 不在 pointerdown 时立刻捕获指针：那会把按钮的 click 一起吞掉。
+        // 只有当手指/鼠标真的开始横向滑动后才捕获，保证滑动过程不丢事件。
     };
 
     const moveSwipe = (e: React.PointerEvent) => {
         const s = swipeRef.current;
-        if (!s.active) return;
+        if (!s.active || s.pointerId !== e.pointerId) return;
         const dx = e.clientX - s.x;
         const dy = e.clientY - s.y;
-        if (Math.abs(dx) > 34 && Math.abs(dx) > Math.abs(dy)) s.moved = true;
+        s.dx = dx;
+        if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy)) {
+            s.moved = true;
+            if (!s.captured) {
+                (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+                s.captured = true;
+            }
+        }
     };
 
     const finishSwipe = (e: React.PointerEvent) => {
         const s = swipeRef.current;
-        if (!s.active) return;
+        if (!s.active || s.pointerId !== e.pointerId) return;
         const el = e.currentTarget as HTMLElement;
-        if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
+        if (s.captured && el.hasPointerCapture?.(e.pointerId)) {
+            el.releasePointerCapture(e.pointerId);
+        }
         s.active = false;
+        s.captured = false;
         if (!s.moved) return;
-        const dx = e.clientX - s.x;
-        if (Math.abs(dx) <= 34) return;
+        const dx = Number.isFinite(s.dx) && s.dx !== 0 ? s.dx : e.clientX - s.x;
+        if (Math.abs(dx) <= 30) return;
         suppressClickRef.current = true;
-        // Left swipe = previous, right swipe = next (as requested).
+        // 左滑 = 上一首，右滑 = 下一首。
         runSwipe(dx < 0 ? "prev" : "next");
         window.setTimeout(() => {
             swipeRef.current.moved = false;
             suppressClickRef.current = false;
-        }, 400);
+        }, 420);
+    };
+
+    const cancelSwipe = (e: React.PointerEvent) => {
+        const s = swipeRef.current;
+        if (!s.active) return;
+        const el = e.currentTarget as HTMLElement;
+        if (s.captured && el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
+        swipeRef.current = { active: false, x: 0, y: 0, dx: 0, moved: false, pointerId: 0, captured: false };
     };
 
     const closePlayback = (e: React.MouseEvent) => {
@@ -424,7 +479,13 @@ function MusicFloatIsland({
     const progressPct = player.duration > 0 ? clampValue(player.currentTime / player.duration, 0, 1) * 100 : 0;
 
     return (
-        <div className="music-island-root">
+        <div
+            className="music-island-root"
+            style={{
+                "--mi-accent": accent || "#ffffff",
+                "--mi-accent-soft": accentSoft || "rgba(255, 255, 255, 0.08)",
+            } as React.CSSProperties}
+        >
             {!expanded && (
                 <button
                     className="music-status-island"
@@ -435,7 +496,7 @@ function MusicFloatIsland({
                     onPointerDown={beginSwipe}
                     onPointerMove={moveSwipe}
                     onPointerUp={finishSwipe}
-                    onPointerCancel={finishSwipe}
+                    onPointerCancel={cancelSwipe}
                     title="展开音乐控制；左右滑动切换歌曲"
                 >
                     {swipeHint ? (
@@ -457,7 +518,7 @@ function MusicFloatIsland({
                                 )}
                             </span>
                             <span className="music-status-island-title">{player.currentTrack?.title}</span>
-                            <WaveBars playing={player.isPlaying} />
+                            {!hideWave && <WaveBars playing={player.isPlaying} />}
                         </>
                     )}
                 </button>
@@ -480,7 +541,7 @@ function MusicFloatIsland({
                         onPointerDown={beginSwipe}
                         onPointerMove={moveSwipe}
                         onPointerUp={finishSwipe}
-                        onPointerCancel={finishSwipe}
+                        onPointerCancel={cancelSwipe}
                     >
                         <div className="music-dynamic-island-content">
                             <div className="music-dynamic-island-top">
@@ -561,6 +622,38 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
     const [visible, setVisible] = useState<MusicFloatVisibility>(DEFAULT_MUSIC_FLOAT_VISIBILITY);
     const [lyricsVisible, setLyricsVisible] = useState(false);
     const [lyricsLocked, setLyricsLocked] = useState(false);
+    const [islandColor, setIslandColor] = useState<MusicIslandColorSettings>(DEFAULT_MUSIC_ISLAND_COLOR);
+    const [accent, setAccent] = useState("#ffffff");
+
+    useEffect(() => {
+        setIslandColor(loadMusicIslandColor());
+        const onColorChange = () => setIslandColor(loadMusicIslandColor());
+        window.addEventListener(MUSIC_ISLAND_COLOR_EVENT, onColorChange);
+        return () => window.removeEventListener(MUSIC_ISLAND_COLOR_EVENT, onColorChange);
+    }, []);
+
+    useEffect(() => {
+        if (islandColor.mode === "fixed") {
+            setAccent(islandColorValue(islandColor.color));
+            return;
+        }
+        const track = player?.currentTrack;
+        if (!track) {
+            setAccent("#ffffff");
+            return;
+        }
+        let cancelled = false;
+        setAccent("#ffffff");
+        resolveTrackAccent(track.id, track.coverUrl).then(color => {
+            if (!cancelled) setAccent(color);
+        });
+        return () => { cancelled = true; };
+    }, [islandColor.mode, islandColor.color, player?.currentTrack?.id, player?.currentTrack?.coverUrl]);
+
+    const accentSoft = hexToRgba(
+        accent,
+        islandColor.mode === "fixed" ? (islandColor.color === "white" ? 0.06 : 0.22) : 0.2,
+    );
 
     useEffect(() => {
         setMode(loadMusicFloatMode());
@@ -600,10 +693,24 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
     return (
         <>
             {active && !shouldHide && visible.orb && (mode === "orb" || mode === "both") && (
-                <MusicFloatOrb player={active} sizes={sizes} />
+                <MusicFloatOrb
+                    player={active}
+                    sizes={sizes}
+                    hideWave={islandColor.hideWave}
+                    accent={accent}
+                    accentSoft={accentSoft}
+                />
             )}
             {active && !shouldHide && visible.island && (mode === "island" || mode === "both") && (
-                <MusicFloatIsland player={active} sizes={sizes} lyricsVisible={lyricsVisible} onToggleLyrics={toggleLyrics} />
+                <MusicFloatIsland
+                    player={active}
+                    sizes={sizes}
+                    lyricsVisible={lyricsVisible}
+                    onToggleLyrics={toggleLyrics}
+                    hideWave={islandColor.hideWave}
+                    accent={accent}
+                    accentSoft={accentSoft}
+                />
             )}
             <MusicDesktopLyrics
                 visible={lyricsVisible}

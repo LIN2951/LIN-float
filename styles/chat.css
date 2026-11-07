@@ -220,6 +220,71 @@
   background: color-mix(in srgb, var(--c-icon) 8%, transparent);
   transform: scale(0.98);
 }
+
+/* ── 会话列表左滑操作（自定义头像 / 置顶），与真实聊天软件一致 ── */
+.chat-swipe-wrap {
+  position: relative;
+  margin: 0 -20px;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.chat-swipe-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  width: 132px;
+  display: flex;
+}
+
+.chat-swipe-action {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  color: #fff;
+  font-size: calc(11px * var(--app-text-scale, 1));
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.chat-swipe-action-avatar {
+  background: linear-gradient(160deg, #5b9cff, #3a6bff);
+}
+
+.chat-swipe-action-pin {
+  background: linear-gradient(160deg, #ffb15c, #ff8a3d);
+}
+
+.chat-swipe-action:active {
+  filter: brightness(0.92);
+}
+
+.chat-swipe-action:disabled {
+  opacity: 0.6;
+}
+
+.chat-swipe-track {
+  position: relative;
+  z-index: 1;
+  background: var(--c-page-body-bg);
+  will-change: transform;
+}
+
+.chat-swipe-track.is-pinned {
+  background: color-mix(in srgb, var(--c-action-blue, #246bfd) 4.5%, var(--c-page-body-bg));
+}
+
+.chat-swipe-track .minimal-list-item {
+  margin: 0;
+}
 .minimal-avatar-wrapper {
   position: relative;
   width: 48px;

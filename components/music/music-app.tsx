@@ -37,6 +37,12 @@ import {
     loadMusicFloatVisibility, saveMusicFloatVisibility, type MusicFloatVisibility,
     loadMusicTheme, saveMusicTheme, applyMusicTheme, type MusicTheme,
 } from "@/lib/music-bg";
+import {
+    ISLAND_COLORS,
+    loadMusicIslandColor,
+    saveMusicIslandColor,
+    type MusicIslandColorSettings,
+} from "@/lib/music-island-color";
 
 type Props = { onClose: () => void };
 type TabId = "recommend" | "mine" | "search" | "local";
@@ -199,10 +205,9 @@ export default function MusicApp({ onClose }: Props) {
     };
 
     const handlePlay = (track: MusicTrack) => {
-        // Add this single track to front of queue (if not already in it)
-        if (!player.queue.some(t => t.id === track.id)) {
-            player.setQueue([track, ...player.queue]);
-        }
+        // 本地歌曲：把整个本地列表作为播放队列，这样上一首/下一首、灵动岛滑动都能正常切歌
+        const ordered = [track, ...tracks.filter(t => t.id !== track.id)];
+        if (ordered.length > 0) player.setQueue(ordered);
         player.playTrack(track);
     };
 
@@ -225,8 +230,12 @@ export default function MusicApp({ onClose }: Props) {
         addedAt: new Date().toISOString(),
     }), []);
 
-    /** Play a single Netease song — append to queue */
-    const handlePlayNetease = useCallback(async (result: NeteaseSearchResult) => {
+    /**
+     * Play a single Netease song.
+     * `list`（可选）传入这首歌所在的整个列表，会把整张列表写进播放队列，
+     * 这样上一首/下一首、灵动岛左右滑动切歌才能真正切到相邻歌曲。
+     */
+    const handlePlayNetease = useCallback(async (result: NeteaseSearchResult, list?: NeteaseSearchResult[]) => {
         const trackId = `netease_${result.id}`;
         beginMusicLoadingToast(trackId);
         const info = await getNeteasePlayInfo(result.id);
@@ -237,8 +246,13 @@ export default function MusicApp({ onClose }: Props) {
         const detail = await getNeteaseSongDetail(result.id);
         const lyrics = await getNeteaseLyrics(result.id);
         const track = toMusicTrack(result, { lyrics, coverUrl: detail?.coverUrl, name: detail?.name, artists: detail?.artists });
-        // Prepend to existing queue
-        if (!player.queue.some(t => t.id === track.id)) {
+
+        if (list && list.length > 1) {
+            const listQueue = list.map(item => (
+                item.id === result.id ? track : toMusicTrack(item)
+            ));
+            player.setQueue(listQueue);
+        } else if (!player.queue.some(t => t.id === track.id)) {
             player.setQueue([track, ...player.queue]);
         }
         player.playUrl(info.url, track);
@@ -584,7 +598,7 @@ function greetingByHour(): { hello: string; sub: string } {
 
 function RecommendTab({ formatTime, onPlayNetease, onPlayAll, onGoSearch, onOpenDaily, onOpenPlaylist }: {
     formatTime: (s: number) => string;
-    onPlayNetease: (r: NeteaseSearchResult) => void;
+    onPlayNetease: (r: NeteaseSearchResult, list?: NeteaseSearchResult[]) => void;
     onPlayAll: (results: NeteaseSearchResult[]) => void;
     onGoSearch: () => void;
     onOpenDaily: (songs: NeteaseSearchResult[]) => void;
@@ -729,7 +743,7 @@ function DailySongsPage({ songs, player, formatTime, onPlayNetease, onPlayAll }:
     songs: NeteaseSearchResult[];
     player: MusicControlsValue;
     formatTime: (s: number) => string;
-    onPlayNetease: (r: NeteaseSearchResult) => void;
+    onPlayNetease: (r: NeteaseSearchResult, list?: NeteaseSearchResult[]) => void;
     onPlayAll: (results: NeteaseSearchResult[]) => void;
 }) {
     const today = new Date();
@@ -760,7 +774,7 @@ function DailySongsPage({ songs, player, formatTime, onPlayNetease, onPlayAll }:
                 {songs.map((r, idx) => {
                     const isCurrent = player.currentTrack?.id === `netease_${r.id}`;
                     return (
-                        <div key={r.id} className="music-song" {...(isCurrent ? { "data-playing": "" } : {})} style={{ animationDelay: `${Math.min(idx * 0.03, 0.4)}s` }} onClick={() => onPlayNetease(r)}>
+                        <div key={r.id} className="music-song" {...(isCurrent ? { "data-playing": "" } : {})} style={{ animationDelay: `${Math.min(idx * 0.03, 0.4)}s` }} onClick={() => onPlayNetease(r, songs)}>
                             {isCurrent && player.isPlaying ? (
                                 <span className="music-song-idx"><span className="music-wave music-queue-wave">{[0, 1, 2].map(i => <span key={i} className="music-wave-bar" style={{ animationDelay: `${i * 0.15}s` }} />)}</span></span>
                             ) : (
@@ -783,7 +797,7 @@ function DailySongsPage({ songs, player, formatTime, onPlayNetease, onPlayAll }:
 function MineTab({ player, formatTime, onPlayNetease, onPlayAll, activePlaylist, setActivePlaylist, playlists, loading, onToast, onGoLocal, onOpenSettings }: {
     player: MusicControlsValue;
     formatTime: (s: number) => string;
-    onPlayNetease: (r: NeteaseSearchResult) => void;
+    onPlayNetease: (r: NeteaseSearchResult, list?: NeteaseSearchResult[]) => void;
     onPlayAll: (results: NeteaseSearchResult[]) => void;
     activePlaylist: NeteasePlaylist | null;
     setActivePlaylist: (pl: NeteasePlaylist | null) => void;
@@ -1016,7 +1030,7 @@ function MineTab({ player, formatTime, onPlayNetease, onPlayAll, activePlaylist,
                                 <MusicSection title="最近播放" action={recentList.length + " 首"}>
                                     <div className="music-list music-list-compact">
                                         {recentList.slice(0, 30).map((song, idx) => (
-                                            <NeteaseSongRow key={song.id + "_" + idx} song={song} index={idx} formatTime={formatTime} onPlay={onPlayNetease} />
+                                            <NeteaseSongRow key={song.id + "_" + idx} song={song} index={idx} formatTime={formatTime} onPlay={(item) => onPlayNetease(item, recentList)} />
                                         ))}
                                     </div>
                                 </MusicSection>
@@ -1276,7 +1290,7 @@ function SongList({ tracks, player, formatTime, onDelete, onPlay }: {
 function OnlineSearchTab({ player, formatTime, onPlayNetease }: {
     player: MusicControlsValue;
     formatTime: (s: number) => string;
-    onPlayNetease: (r: NeteaseSearchResult) => void;
+    onPlayNetease: (r: NeteaseSearchResult, list?: NeteaseSearchResult[]) => void;
 }) {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<NeteaseSearchResult[]>([]);
@@ -1318,7 +1332,7 @@ function OnlineSearchTab({ player, formatTime, onPlayNetease }: {
             {results.length > 0 ? (
                 <div className="music-list">
                     {results.map((r, idx) => (
-                        <div key={r.id} className="music-song" style={{ animationDelay: `${Math.min(idx * 0.04, 0.5)}s` }} onClick={() => onPlayNetease(r)}>
+                        <div key={r.id} className="music-song" style={{ animationDelay: `${Math.min(idx * 0.04, 0.5)}s` }} onClick={() => onPlayNetease(r, results)}>
                             <div className="music-song-cover">
                                 {r.coverUrl ? <img src={r.coverUrl} alt="" /> : (
                                     <div className="music-song-cover-placeholder">
@@ -1352,7 +1366,7 @@ function OnlineSearchTab({ player, formatTime, onPlayNetease }: {
 function PlaylistsTab({ player, formatTime, onPlayNetease, onPlayAll, activePlaylist, setActivePlaylist, playlists, loading, onToast }: {
     player: MusicControlsValue;
     formatTime: (s: number) => string;
-    onPlayNetease: (r: NeteaseSearchResult) => void;
+    onPlayNetease: (r: NeteaseSearchResult, list?: NeteaseSearchResult[]) => void;
     onPlayAll: (results: NeteaseSearchResult[]) => void;
     activePlaylist: NeteasePlaylist | null;
     setActivePlaylist: (pl: NeteasePlaylist | null) => void;
@@ -1496,7 +1510,7 @@ function PlaylistsTab({ player, formatTime, onPlayNetease, onPlayAll, activePlay
                         {tracks.map((r, idx) => {
                             const isCurrent = player.currentTrack?.id === `netease_${r.id}`;
                             return (
-                            <div key={r.id} className="music-song" {...(isCurrent ? { "data-playing": "" } : {})} style={{ animationDelay: `${Math.min(idx * 0.03, 0.4)}s` }} onClick={() => onPlayNetease(r)}>
+                            <div key={r.id} className="music-song" {...(isCurrent ? { "data-playing": "" } : {})} style={{ animationDelay: `${Math.min(idx * 0.03, 0.4)}s` }} onClick={() => onPlayNetease(r, tracks)}>
                                 {isCurrent && player.isPlaying ? (
                                     <span className="music-song-idx"><span className="music-wave music-queue-wave">{[0, 1, 2].map(i => <span key={i} className="music-wave-bar" style={{ animationDelay: `${i * 0.15}s` }} />)}</span></span>
                                 ) : (
@@ -1609,6 +1623,14 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
         const next = { ...floatVisible, ...patch };
         saveMusicFloatVisibility(next);
         setFloatVisible(next);
+    };
+
+    // Backstage island accent color
+    const [islandColor, setIslandColor] = useState<MusicIslandColorSettings>(() => loadMusicIslandColor());
+    const applyIslandColor = (patch: Partial<MusicIslandColorSettings>) => {
+        const next = { ...islandColor, ...patch };
+        saveMusicIslandColor(next);
+        setIslandColor(next);
     };
 
     // Music play source: netease (official) or free aggregation
@@ -1937,6 +1959,43 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                         </label>
                     </div>
                     <div className="music-settings-hint">隐藏后歌曲继续在后台播放，在设置里重新开启即可恢复显示</div>
+
+                    <div className="music-island-color-block">
+                        <div className="music-settings-label">灵动岛颜色</div>
+                        <div className="music-settings-hint">开启「跟随歌曲取色」后，波浪条和整块灵动岛会随当前歌曲变化颜色；关闭后保持透明玻璃 + 白色波浪条</div>
+                        <label className="music-float-switch">
+                            <span>跟随歌曲取色</span>
+                            <input
+                                type="checkbox"
+                                checked={islandColor.mode === "follow"}
+                                onChange={(e) => applyIslandColor({ mode: e.target.checked ? "follow" : "fixed" })}
+                            />
+                            <i />
+                        </label>
+                        <div className="music-island-color-row">
+                            {ISLAND_COLORS.map(color => (
+                                <button
+                                    key={color.id}
+                                    type="button"
+                                    className="music-island-color-swatch"
+                                    {...(islandColor.mode === "fixed" && islandColor.color === color.id ? { "data-on": "" } : {})}
+                                    style={{ background: color.value }}
+                                    onClick={() => applyIslandColor({ mode: "fixed", color: color.id })}
+                                    title={color.label}
+                                    aria-label={`灵动岛颜色：${color.label}`}
+                                />
+                            ))}
+                        </div>
+                        <label className="music-float-switch">
+                            <span>隐藏跳动波浪条</span>
+                            <input
+                                type="checkbox"
+                                checked={islandColor.hideWave}
+                                onChange={(e) => applyIslandColor({ hideWave: e.target.checked })}
+                            />
+                            <i />
+                        </label>
+                    </div>
                 </div>
 
                 {/* Custom backgrounds: app pages + player page */}

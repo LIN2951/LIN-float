@@ -25,11 +25,11 @@ export const LYRICS_COLORS = [
     { id: "pink", value: "#ff9ecb", label: "粉" },
 ] as const;
 
-type LyricsAppearance = { fontSize: number; color: string };
+type LyricsAppearance = { fontSize: number; color: string; lineCount: 1 | 2 };
 type LyricsPosition = { x: number; y: number };
 type TimedLine = { time: number; text: string };
 
-const DEFAULT_APPEARANCE: LyricsAppearance = { fontSize: FONT_DEFAULT, color: "white" };
+const DEFAULT_APPEARANCE: LyricsAppearance = { fontSize: FONT_DEFAULT, color: "white", lineCount: 2 };
 
 function clamp(v: number, min: number, max: number) {
     return Math.max(min, Math.min(v, max));
@@ -202,6 +202,7 @@ export function MusicDesktopLyrics({
             return {
                 fontSize: clamp(Number(parsed.fontSize) || FONT_DEFAULT, FONT_MIN, FONT_MAX),
                 color: LYRICS_COLORS.some(c => c.id === parsed.color) ? parsed.color as string : "white",
+                lineCount: parsed.lineCount === 1 ? 1 : 2,
             };
         } catch { return DEFAULT_APPEARANCE; }
     });
@@ -363,7 +364,7 @@ export function MusicDesktopLyrics({
         >
             <div className="music-desktop-lyrics-lines">
                 <div className="music-desktop-lyrics-line" style={{ fontSize: `${appearance.fontSize}px` }}>{currentText}</div>
-                {nextText && (
+                {appearance.lineCount === 2 && nextText && (
                     <div
                         className="music-desktop-lyrics-line"
                         data-next=""
@@ -380,6 +381,16 @@ export function MusicDesktopLyrics({
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                             <rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
                         </svg>
+                    </button>
+                    <button
+                        className="music-desktop-lyrics-btn music-desktop-lyrics-count"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setAppearance(prev => ({ ...prev, lineCount: prev.lineCount === 2 ? 1 : 2 }));
+                        }}
+                        title={appearance.lineCount === 2 ? "当前显示两句，点击切换为一句" : "当前显示一句，点击切换为两句"}
+                    >
+                        {appearance.lineCount === 2 ? "2句" : "1句"}
                     </button>
                     <button className="music-desktop-lyrics-btn" onClick={(e) => { e.stopPropagation(); changeFont(-FONT_STEP); }} title="减小字号" disabled={appearance.fontSize <= FONT_MIN}>A−</button>
                     <button className="music-desktop-lyrics-btn" onClick={(e) => { e.stopPropagation(); changeFont(FONT_STEP); }} title="增大字号" disabled={appearance.fontSize >= FONT_MAX}>A＋</button>
