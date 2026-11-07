@@ -5,7 +5,7 @@ import { createContext, useContext, useState, useRef, useCallback, useEffect, us
 import type { MusicTrack } from "./music-storage";
 import { getAudioBlob, markTrackPlayed } from "./music-storage";
 import { findPlayableMatch, getNeteaseLyrics, getNeteasePlayUrl, getNeteasePlayInfo, getNeteaseSongDetail, loadMusicSourceConfig } from "./music-service";
-import { getFreePlayUrl, resolveFreeServerUrl } from "./music-free-source";
+import { getFreePlayUrl } from "./music-free-source";
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { registerMusicControlBridge } from "./music-control-bridge";
 import { applyMusicTheme, loadMusicTheme, MUSIC_THEME_EVENT } from "./music-bg";
@@ -117,6 +117,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const switchingRef = useRef(false);
     const queueRef = useRef<MusicTrack[]>([]);
     const loadAndPlayRef = useRef<(track: MusicTrack) => void>(() => {});
+    // 递增的切歌 token：异步解析播放地址回来后若已不是最新一次切歌，就丢弃旧结果，
+    // 避免「显示已切成下一首、声音却还是上一首」的错乱。
+    const switchTokenRef = useRef(0);
 
     const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -365,36 +368,42 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         if (!audio) return;
         let track = trackInput;
 
+        // 每次切歌分配一个递增 token，异步解析播放地址结束后若已不是最新一次切歌，
+        // 就丢弃这次旧结果，避免「显示切成下一首、声音却还是上一首」的错乱。
+        const token = ++switchTokenRef.current;
         switchingRef.current = true;
+
+        // 先把旧声音彻底停掉（HTMLAudioElement 与 YouTube IFrame 两套引擎都停），
+        // 再切换 UI，杜绝上一首还在响。
+        ytEngine.pause();
         cleanupBlobUrl();
         audio.pause();
 
-        // 先把当前歌曲切过去（歌名/封面/进度条立即变化），再去解析播放地址。
-        // 否则在线歌曲要等接口返回 1~2 秒，看起来像「点了没反应」。
+        // 先切换 UI（歌名/封面/进度立即变化），并乐观标记为「播放中」，
+        // 保证切歌全程播放按钮一直是「暂停」（播放中）状态，不会闪现「播放」。
         activeEngineRef.current = "audio";
         setCurrentTrack(track);
         setCurrentTime(0);
         setDuration(track.duration || 0);
+        setIsPlaying(true);
 
         // ── YouTube: hidden IFrame engine ──
         if (track.source === "youtube" || track.id.startsWith("yt_")) {
             activeEngineRef.current = "yt";
             const videoId = track.externalId || track.id.replace(/^yt_/, "");
-            setIsPlaying(false);
             const playedAt = new Date().toISOString();
             void markTrackPlayed(track.id, playedAt).catch(() => undefined);
             try {
                 await ytEngine.load(videoId);
             } catch {
                 notifyPlaybackError("YouTube 播放器加载失败，请检查网络后重试");
+                if (token === switchTokenRef.current) setIsPlaying(false);
             } finally {
                 switchingRef.current = false;
             }
             return;
         }
 
-        // ── Everything else goes through the HTMLAudioElement ──
-        ytEngine.pause();
         fallbackTriedRef.current = false;
 
         let shouldMarkPlayed = false;
@@ -414,6 +423,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
                 // aggregation source so the song can still play fully.
                 if (!playUrl) playUrl = await getFreePlayUrl(track, bases);
             }
+            if (token !== switchTokenRef.current) return; // 期间又切了别的歌
             if (!playUrl) {
                 notifyPlaybackError("该歌曲暂无可用播放源");
                 switchingRef.current = false;
@@ -447,6 +457,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         } else if (track.source === "dlsite") {
             // Purchased MP3 bound to this link first; otherwise the trial clip.
             const blob = await getAudioBlob(track.id);
+            if (token !== switchTokenRef.current) return;
             if (blob) {
                 const url = URL.createObjectURL(blob);
                 blobUrlRef.current = url;
@@ -457,6 +468,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             } else {
                 notifyPlaybackError("该 DLsite 作品没有试听片段，可上传购买的正版 MP3 绑定后播放");
                 switchingRef.current = false;
+                setIsPlaying(false);
                 return;
             }
         } else if (track.source === "reddit") {
@@ -468,25 +480,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             } else {
                 notifyPlaybackError("该 Reddit 帖子没有可播放的音轨");
                 switchingRef.current = false;
-                return;
-            }
-        } else if (track.id.startsWith("gd_")) {
-            // GD音乐：免费多平台直链。id 形如 gd_<server>:<songId>，按需实时解析。
-            const rest = track.id.slice(3);
-            const sep = rest.indexOf(":");
-            const server = sep > 0 ? rest.slice(0, sep) : "netease";
-            const sid = sep > 0 ? rest.slice(sep + 1) : rest;
-            const direct = await resolveFreeServerUrl(server, sid, track.title, track.artist);
-            if (!direct) {
-                notifyPlaybackError("该歌曲暂无可用免费源，换一首试试");
-                switchingRef.current = false;
                 setIsPlaying(false);
                 return;
             }
-            audio.src = direct;
         } else {
             // Local tracks: load blob from IndexedDB
             const blob = await getAudioBlob(track.id);
+            if (token !== switchTokenRef.current) return;
             if (!blob) {
                 switchingRef.current = false;
                 setIsPlaying(false);
@@ -509,8 +509,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
         try {
             await audio.play();
+            if (token === switchTokenRef.current) setIsPlaying(true);
         } catch {
-            // Autoplay blocked — user interaction needed
+            // Autoplay blocked / 播放失败
+            if (token === switchTokenRef.current) setIsPlaying(false);
         } finally {
             switchingRef.current = false;
         }

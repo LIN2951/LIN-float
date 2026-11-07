@@ -161,55 +161,13 @@ export async function GET(req: Request) {
     const id = params.get("id") || "";
     const title = params.get("title") || "";
     const artist = params.get("artist") || "";
-    const keyword = params.get("s") || params.get("keyword") || title || "";
     const bases = parseBases(params.get("bases"));
-
-    // GD音乐：多平台免费搜索
-    if (action === "search") {
-        if (!keyword.trim()) return NextResponse.json({ list: [] });
-        const results: { id: string; title: string; artist: string; server: string; pic?: string }[] = [];
-        const seen = new Set<string>();
-        for (const server of FALLBACK_SERVERS) {
-            for (const base of bases) {
-                const items = await metingSearch(base, server, keyword);
-                for (const it of items.slice(0, 12)) {
-                    const t = (it.title || "").trim();
-                    if (!t || !it.id) continue;
-                    const key = `${server}:${it.id}`;
-                    if (seen.has(key)) continue;
-                    seen.add(key);
-                    results.push({
-                        id: String(it.id),
-                        title: t,
-                        artist: (it.author || "").trim(),
-                        server,
-                        pic: it.pic || undefined,
-                    });
-                }
-                if (results.length >= 24) break;
-            }
-            if (results.length >= 24) break;
-        }
-        return NextResponse.json({ list: results.slice(0, 24) });
-    }
 
     if (action !== "url") {
         return NextResponse.json({ url: null, list: [] }, { status: 400 });
     }
 
-    const server = params.get("server") || "";
-
-    // 1) 指定平台 + id 直接解析（GD音乐搜索结果携带 server，可精准命中）。
-    if (id && server && server !== "netease") {
-        for (const base of bases) {
-            const url = await metingUrl(base, server, id);
-            if (url && await isPlayableAudio(url)) {
-                return NextResponse.json({ url, source: server });
-            }
-        }
-    }
-
-    // 2) Try netease by id first (best metadata, but VIP songs 404).
+    // 1) Try netease by id first (best metadata, but VIP songs 404).
     if (id) {
         for (const base of bases) {
             const url = await metingUrl(base, "netease", id);
@@ -219,7 +177,7 @@ export async function GET(req: Request) {
         }
     }
 
-    // 3) Fall back: search title+artist across other servers and resolve.
+    // 2) Fall back: search title+artist across other servers and resolve.
     const searchKeyword = artist ? `${title} ${artist}` : title;
     if (searchKeyword.trim()) {
         for (const srv of FALLBACK_SERVERS) {

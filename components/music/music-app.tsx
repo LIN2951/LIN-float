@@ -42,10 +42,8 @@ import {
     saveMusicIslandColor,
     type MusicIslandColorSettings,
 } from "@/lib/music-island-color";
-import { searchFreeMusic, resolveFreeServerUrl, type FreeSearchResult } from "@/lib/music-free-source";
-
 type Props = { onClose: () => void };
-type TabId = "recommend" | "mine" | "search" | "local" | "gd";
+type TabId = "recommend" | "mine" | "search" | "local";
 
 function FloatSizeStepper({
     label, value, min, max, step, onChange,
@@ -292,34 +290,6 @@ export default function MusicApp({ onClose }: Props) {
         else if (playable.trial) showMusicToast("VIP 歌曲，当前播放 30 秒试听", 2600);
     }, [beginMusicLoadingToast, player, showMusicToast, toMusicTrack]);
 
-    /** GD音乐：免费多平台搜索，点击直接解析并播放。 */
-    const toGdMusicTrack = useCallback((r: FreeSearchResult): MusicTrack => ({
-        id: `gd_${r.server}:${r.id}`,
-        title: r.title,
-        artist: r.artist || "未知歌手",
-        duration: 0,
-        coverUrl: r.pic || undefined,
-        liked: false,
-        addedAt: new Date().toISOString(),
-    }), []);
-
-    const handlePlayGd = useCallback(async (result: FreeSearchResult, list?: FreeSearchResult[]) => {
-        const track = toGdMusicTrack(result);
-        const trackId = track.id;
-        beginMusicLoadingToast(trackId);
-        const url = await resolveFreeServerUrl(result.server, result.id, result.title, result.artist);
-        if (!url) {
-            showMusicToast("该歌曲暂无可用免费源，换一首试试", 2600);
-            return;
-        }
-        if (list && list.length > 1) {
-            player.setQueue(list.map(r => toGdMusicTrack(r)));
-        } else if (!player.queue.some(t => t.id === track.id)) {
-            player.setQueue([track, ...player.queue]);
-        }
-        player.playUrl(url, track);
-    }, [beginMusicLoadingToast, player, showMusicToast, toGdMusicTrack]);
-
     const formatTime = (s: number) => {
         if (!s || !isFinite(s)) return "--:--";
         const m = Math.floor(s / 60);
@@ -493,10 +463,6 @@ export default function MusicApp({ onClose }: Props) {
                 <OnlineSearchTab player={player} formatTime={formatTime} onPlayNetease={handlePlayNetease} />
             )}
 
-            {tab === "gd" && (
-                <GdMusicPage onPlayGd={handlePlayGd} />
-            )}
-
             {/* Floating buttons */}
             {tab === "local" && (
                 <>
@@ -588,10 +554,6 @@ export default function MusicApp({ onClose }: Props) {
                         <span>我的</span>
                     </button>
                 )}
-                <button className="music-tabbar-item" {...(tab === "gd" ? { "data-active": "" } : {})} onClick={() => { setTab("gd"); setActivePlaylist(null); }}>
-                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18" /><path d="M5.5 6.5c1.6 1.3 4.2 1.3 6.5-1.5 2.3 2.8 4.9 2.8 6.5 1.5" /></svg>
-                    <span>GD音乐</span>
-                </button>
                 <button className="music-tabbar-item" {...(tab === "local" ? { "data-active": "" } : {})} onClick={() => { setTab("local"); setActivePlaylist(null); }}>
                     <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
                     <span>本地</span>
@@ -1392,90 +1354,6 @@ function OnlineSearchTab({ player, formatTime, onPlayNetease }: {
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
                     </div>
                     <div className="music-empty-text">搜索网易云音乐</div>
-                </div>
-            )}
-        </div>
-    );
-}
-
-// ── GD音乐（免费多平台听歌）──
-const GD_SERVER_LABELS: Record<string, string> = {
-    netease: "网易云",
-    kugou: "酷狗",
-    kuwo: "酷我",
-    tencent: "QQ",
-    baidu: "百度",
-};
-
-function GdMusicPage({ onPlayGd }: { onPlayGd: (r: FreeSearchResult, list?: FreeSearchResult[]) => void }) {
-    const [query, setQuery] = useState("");
-    const [results, setResults] = useState<FreeSearchResult[]>([]);
-    const [searching, setSearching] = useState(false);
-
-    const doSearch = async () => {
-        if (!query.trim()) return;
-        setSearching(true);
-        try {
-            const r = await searchFreeMusic(query.trim());
-            setResults(r);
-        } catch { /* ignore */ }
-        setSearching(false);
-    };
-
-    return (
-        <div className="music-search-tab">
-            <div className="music-gd-banner">
-                <span className="music-gd-banner-title">GD音乐 · 免费听歌</span>
-                <span className="music-gd-banner-sub">多平台聚合搜索，不限 VIP，实时解析免费源</span>
-            </div>
-            <div className="music-search-bar">
-                <input
-                    className="music-search-input"
-                    placeholder="搜索歌曲、歌手（免费源）..."
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && doSearch()}
-                />
-                <button className="music-search-btn" onClick={doSearch} disabled={searching} title="搜索">
-                    {searching ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="music-spin">
-                            <line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
-                        </svg>
-                    ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                        </svg>
-                    )}
-                </button>
-            </div>
-
-            {results.length > 0 ? (
-                <div className="music-list">
-                    {results.map((r, idx) => (
-                        <div key={`${r.server}_${r.id}`} className="music-song" style={{ animationDelay: `${Math.min(idx * 0.04, 0.5)}s` }} onClick={() => onPlayGd(r, results)}>
-                            <div className="music-song-cover">
-                                {r.pic ? <img src={r.pic} alt="" /> : (
-                                    <div className="music-song-cover-placeholder">
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="music-song-info">
-                                <div className="music-song-title">{r.title}</div>
-                                <div className="music-song-artist">{r.artist || "未知歌手"}</div>
-                            </div>
-                            <span className="music-gd-source">{GD_SERVER_LABELS[r.server] || r.server}</span>
-                        </div>
-                    ))}
-                </div>
-            ) : searching ? (
-                <div className="music-empty"><div className="music-empty-text">搜索中...</div></div>
-            ) : (
-                <div className="music-empty">
-                    <div className="music-empty-icon">
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-                    </div>
-                    <div className="music-empty-text">搜索免费音乐</div>
                 </div>
             )}
         </div>
