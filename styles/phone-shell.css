@@ -1180,39 +1180,6 @@
   padding-bottom: calc(var(--safe-area-bottom, 0px) + 28px);
 }
 
-/* ── 真·沉浸全屏 ──────────────────────────────────────
-   通过 requestFullscreen 隐藏手机自带状态栏后，用动态视口高度 100dvh
-   把 float 页面从上到下铺满，顶部不再露出空白。 */
-html:fullscreen,
-html:fullscreen body {
-  height: 100dvh;
-  min-height: 100dvh;
-  overflow: hidden;
-}
-
-html:fullscreen .app-root,
-html:fullscreen .app-root.splash-root {
-  width: 100vw;
-  height: 100dvh;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-html:fullscreen .phone-shell-wrap,
-html:fullscreen .splash-shell-wrap {
-  margin-top: 0;
-  transform-origin: top left;
-}
-
-html:fullscreen .phone-shell {
-  --phone-screen-height: 100dvh;
-}
-
-html:fullscreen .splash-phone-screen {
-  height: 100dvh;
-}
-
 /* ══════════════════════════════════════════
    Global Visual Overrides (Shadows & Borders)
    ══════════════════════════════════════════ */

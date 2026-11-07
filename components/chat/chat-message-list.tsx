@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useSyncExternalStore } from "react";
 import { ChevronLeft } from "lucide-react";
-import { CHAT_MESSAGE_PUSHED_EVENT, loadChatSessions, loadChatContacts, ChatSession, createOrGetSession, createGroupSession, pushChatMessage, addChatContact, loadChatMessages, getLastVisibleSessionMessage, getChatMessagePreview, resolveChatCharacterAvatar, patchChatSession } from "@/lib/chat-storage";
-import { fileToCompressedDataUrl } from "@/lib/music-bg";
+import { CHAT_MESSAGE_PUSHED_EVENT, loadChatSessions, loadChatContacts, ChatSession, createOrGetSession, createGroupSession, pushChatMessage, addChatContact, loadChatMessages, getLastVisibleSessionMessage, getChatMessagePreview, resolveChatCharacterAvatar } from "@/lib/chat-storage";
 import { loadCharacters } from "@/lib/character-storage";
 import { Character } from "@/lib/character-types";
 import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
@@ -790,9 +789,6 @@ function ContactPicker({ onClose, onSelect }: { onClose: () => void; onSelect: (
     );
 }
 
-const SWIPE_ACTION_WIDTH = 132;
-const SWIPE_OPEN_THRESHOLD = 58;
-
 function SessionItem({ session, onSelect, isPinned }: { session: ChatSession, onSelect: () => void, isPinned?: boolean }) {
     const chars = loadCharacters();
     const character = chars.find(c => c.id === session.contactId);
@@ -804,21 +800,6 @@ function SessionItem({ session, onSelect, isPinned }: { session: ChatSession, on
     const onlinePreview = lastVisibleMessage ? (getChatMessagePreview(lastVisibleMessage) || lastVisibleMessage.content) : "";
     const preview = offlineIsNewer ? getChatOfflineTurnPreview(lastOfflineTurn) : onlinePreview;
     const displayTime = pickLaterTime(lastVisibleMessage?.createdAt, lastOfflineTurn?.createdAt) || session.updatedAt;
-
-    const [offset, setOffset] = useState(0);
-    const [dragging, setDragging] = useState(false);
-    const [uploading, setUploading] = useState(false);
-    const avatarInputRef = React.useRef<HTMLInputElement>(null);
-    const suppressClickRef = React.useRef(false);
-    const gestureRef = React.useRef({
-        x: 0,
-        y: 0,
-        startOffset: 0,
-        active: false,
-        horizontal: false,
-        pointerId: 0,
-        captured: false,
-    });
 
     // Group chat: build grid of participant avatars (2×2)
     const isGroup = session.isGroup;
@@ -833,200 +814,59 @@ function SessionItem({ session, onSelect, isPinned }: { session: ChatSession, on
         ].slice(0, 4)
         : [];
 
-    const customAvatar = isGroup ? session.groupAvatar : session.characterAvatarOverride;
-    const characterAvatar = resolveChatCharacterAvatar(character);
-
-    const beginSwipe = (e: React.PointerEvent<HTMLDivElement>) => {
-        if ((e.target as HTMLElement).closest("button")) return;
-        gestureRef.current = {
-            x: e.clientX,
-            y: e.clientY,
-            startOffset: offset,
-            active: true,
-            horizontal: false,
-            pointerId: e.pointerId,
-            captured: false,
-        };
-    };
-
-    const moveSwipe = (e: React.PointerEvent<HTMLDivElement>) => {
-        const g = gestureRef.current;
-        if (!g.active || g.pointerId !== e.pointerId) return;
-        const dx = e.clientX - g.x;
-        const dy = e.clientY - g.y;
-        if (!g.horizontal) {
-            // 竖向滑动优先交给列表滚动，只有明确横向滑动才接管
-            if (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) {
-                g.active = false;
-                return;
-            }
-            if (Math.abs(dx) > 10) {
-                g.horizontal = true;
-                setDragging(true);
-                (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-                g.captured = true;
-            }
-        }
-        if (g.horizontal) {
-            setOffset(Math.max(-SWIPE_ACTION_WIDTH, Math.min(0, g.startOffset + dx)));
-        }
-    };
-
-    const finishSwipe = (e: React.PointerEvent<HTMLDivElement>) => {
-        const g = gestureRef.current;
-        if (!g.active || g.pointerId !== e.pointerId) return;
-        const el = e.currentTarget as HTMLElement;
-        if (g.captured && el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
-        g.active = false;
-        setDragging(false);
-        if (!g.horizontal) return;
-        setOffset(prev => (prev < -SWIPE_OPEN_THRESHOLD ? -SWIPE_ACTION_WIDTH : 0));
-        suppressClickRef.current = true;
-        window.setTimeout(() => { suppressClickRef.current = false; }, 350);
-    };
-
-    const cancelSwipe = (e: React.PointerEvent<HTMLDivElement>) => {
-        const g = gestureRef.current;
-        if (!g.active) return;
-        const el = e.currentTarget as HTMLElement;
-        if (g.captured && el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
-        g.active = false;
-        setDragging(false);
-        setOffset(0);
-    };
-
-    const handleRowClick = () => {
-        if (suppressClickRef.current) return;
-        if (offset !== 0) {
-            setOffset(0);
-            return;
-        }
-        onSelect();
-    };
-
-    const togglePin = () => {
-        patchChatSession(session.id, { isPinned: !isPinned });
-        setOffset(0);
-    };
-
-    const pickAvatar = () => {
-        avatarInputRef.current?.click();
-    };
-
-    const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        e.target.value = "";
-        if (!file) return;
-        setUploading(true);
-        try {
-            const dataUrl = await fileToCompressedDataUrl(file, 320, 0.8);
-            if (isGroup) patchChatSession(session.id, { groupAvatar: dataUrl });
-            else patchChatSession(session.id, { characterAvatarOverride: dataUrl });
-        } catch { /* ignore */ }
-        setUploading(false);
-        setOffset(0);
-    };
-
     return (
-        <div className="chat-swipe-wrap">
-            <div className="chat-swipe-actions">
-                <button
-                    type="button"
-                    className="chat-swipe-action chat-swipe-action-avatar"
-                    onClick={pickAvatar}
-                    disabled={uploading}
-                >
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
-                    <span>{uploading ? "处理中" : (isGroup ? "群头像" : "头像")}</span>
-                </button>
-                <button
-                    type="button"
-                    className="chat-swipe-action chat-swipe-action-pin"
-                    onClick={togglePin}
-                >
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 17v5" /><path d="M9 3h6l-1 6 4 4v2H6v-2l4-4z" /></svg>
-                    <span>{isPinned ? "取消置顶" : "置顶"}</span>
-                </button>
-            </div>
-
-            <div
-                className={`chat-swipe-track${isPinned ? " is-pinned" : ""}`}
-                style={{
-                    transform: `translate3d(${offset}px, 0, 0)`,
-                    transition: dragging ? "none" : "transform 0.26s cubic-bezier(0.22, 1, 0.36, 1)",
-                }}
-                onPointerDown={beginSwipe}
-                onPointerMove={moveSwipe}
-                onPointerUp={finishSwipe}
-                onPointerCancel={cancelSwipe}
-                onClick={handleRowClick}
-            >
-                <div className={`minimal-list-item${isPinned ? ' chat-pinned' : ''}`}>
-                    {isGroup ? (
-                        customAvatar ? (
-                            <div className="minimal-avatar-wrapper">
-                                <img src={customAvatar} className="w-full h-full object-cover pointer-events-none rounded-full" alt="" />
-                                <span className="minimal-online-dot" />
-                            </div>
-                        ) : (
-                            <div className="minimal-avatar-wrapper grid grid-cols-2 grid-rows-2 gap-[1px] p-[2px] bg-[var(--c-card-border)] rounded-full overflow-hidden">
-                                {groupAvatarItems.map((c) => (
-                                    <div key={c.id} className="overflow-hidden rounded-[3px] bg-[var(--c-page-body-bg)]">
-                                        {c.avatar ? (
-                                            <img src={c.avatar} className="w-full h-full object-cover pointer-events-none" alt="" />
-                                        ) : (
-                                            <ChatFallbackAvatar className="pointer-events-none" />
-                                        )}
-                                    </div>
-                                ))}
-                                {Array.from({ length: Math.max(0, 4 - groupAvatarItems.length) }).map((_, i) => (
-                                    <div key={`empty-${i}`} className="overflow-hidden rounded-[3px] bg-[var(--c-page-body-bg)]" />
-                                ))}
-                            </div>
-                        )
-                    ) : (
-                        <div className="minimal-avatar-wrapper">
-                            {customAvatar || characterAvatar ? (
-                                <img src={customAvatar || characterAvatar} className="w-full h-full object-cover pointer-events-none rounded-full" alt="" />
+        <div
+            className={`minimal-list-item${isPinned ? ' chat-pinned' : ''}`}
+            onClick={onSelect}
+        >
+            {isGroup ? (
+                <div className="minimal-avatar-wrapper grid grid-cols-2 grid-rows-2 gap-[1px] p-[2px] bg-[var(--c-card-border)] rounded-full overflow-hidden">
+                    {groupAvatarItems.map((c) => (
+                        <div key={c.id} className="overflow-hidden rounded-[3px] bg-[var(--c-page-body-bg)]">
+                            {c.avatar ? (
+                                <img src={c.avatar} className="w-full h-full object-cover pointer-events-none" alt="" />
                             ) : (
-                                <ChatFallbackAvatar className="pointer-events-none rounded-full" />
+                                <ChatFallbackAvatar className="pointer-events-none" />
                             )}
-                            <span className="minimal-online-dot" />
                         </div>
+                    ))}
+                    {Array.from({ length: Math.max(0, 4 - groupAvatarItems.length) }).map((_, i) => (
+                        <div key={`empty-${i}`} className="overflow-hidden rounded-[3px] bg-[var(--c-page-body-bg)]" />
+                    ))}
+                </div>
+            ) : (
+                <div className="minimal-avatar-wrapper">
+                    {resolveChatCharacterAvatar(character) ? (
+                        <img src={resolveChatCharacterAvatar(character)} className="w-full h-full object-cover pointer-events-none rounded-full" alt="" />
+                    ) : (
+                        <ChatFallbackAvatar className="pointer-events-none rounded-full" />
                     )}
-                    <div className="flex-1 overflow-hidden h-[48px] flex flex-col justify-center gap-1">
-                        <div className="flex justify-between items-center">
-                            <span className="ts-16 font-medium text-[var(--c-text-title)] truncate">
-                                {isGroup ? (session.groupName || "群聊") : (session.alias || character?.name || `User_${session.contactId.slice(-4)}`)}
-                            </span>
-                            <span className="ts-12 text-[var(--c-icon)] font-medium">
-                                {formatChatUiTime(displayTime)}
-                            </span>
-                        </div>
-                        <div className="flex justify-between items-center gap-2">
-                            <span className="ts-13 text-[var(--c-text)] opacity-80 truncate font-normal">
-                                {preview || getLastNonEmptyPreview(session.id)}
-                            </span>
-                            {session.unreadCount > 0 && (
-                                <span
-                                    className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#ff3b30] text-white text-[10px] leading-[18px] text-center font-semibold shrink-0"
-                                    aria-label={`${session.unreadCount} 条未读消息`}
-                                >
-                                    {session.unreadCount > 99 ? "99+" : session.unreadCount}
-                                </span>
-                            )}
-                        </div>
-                    </div>
+                    <span className="minimal-online-dot" />
+                </div>
+            )}
+            <div className="flex-1 overflow-hidden h-[48px] flex flex-col justify-center gap-1">
+                <div className="flex justify-between items-center">
+                    <span className="ts-16 font-medium text-[var(--c-text-title)] truncate">
+                        {isGroup ? (session.groupName || "群聊") : (session.alias || character?.name || `User_${session.contactId.slice(-4)}`)}
+                    </span>
+                    <span className="ts-12 text-[var(--c-icon)] font-medium">
+                        {formatChatUiTime(displayTime)}
+                    </span>
+                </div>
+                <div className="flex justify-between items-center gap-2">
+                    <span className="ts-13 text-[var(--c-text)] opacity-80 truncate font-normal">
+                        {preview || getLastNonEmptyPreview(session.id)}
+                    </span>
+                    {session.unreadCount > 0 && (
+                        <span
+                            className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#ff3b30] text-white text-[10px] leading-[18px] text-center font-semibold shrink-0"
+                            aria-label={`${session.unreadCount} 条未读消息`}
+                        >
+                            {session.unreadCount > 99 ? "99+" : session.unreadCount}
+                        </span>
+                    )}
                 </div>
             </div>
-
-            <input
-                ref={avatarInputRef}
-                type="file"
-                accept="image/*"
-                style={{ display: "none" }}
-                onChange={handleAvatarFile}
-            />
         </div>
     );
 }

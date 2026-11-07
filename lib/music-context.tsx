@@ -113,6 +113,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const durationRef = useRef(0);
     const fallbackTriedRef = useRef(false);
     const handleTrackEndRef = useRef<() => void>(() => {});
+    // 切歌时 audio.pause() 会触发 pause 事件，不能把「正在切歌」误判成用户暂停。
+    const switchingRef = useRef(false);
+    const queueRef = useRef<MusicTrack[]>([]);
+    const loadAndPlayRef = useRef<(track: MusicTrack) => void>(() => {});
 
     const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -168,7 +172,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         audio.addEventListener("ended", () => {
             handleTrackEndRef.current();
         });
-        audio.addEventListener("pause", () => setIsPlaying(false));
+        audio.addEventListener("pause", () => {
+            if (switchingRef.current) return; // 切歌过程中的暂停不算用户暂停
+            setIsPlaying(false);
+        });
         audio.addEventListener("play", () => setIsPlaying(true));
         audio.addEventListener("error", () => {
             if (activeEngineRef.current !== "audio") return;
@@ -192,7 +199,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         // Bridge the hidden YouTube IFrame engine into the same state shape.
         ytEngine.setCallbacks({
             onPlaying: () => setIsPlaying(true),
-            onPaused: () => setIsPlaying(false),
+            onPaused: () => { if (!switchingRef.current) setIsPlaying(false); },
             onTime: (t) => setCurrentTime(t),
             onDuration: (d) => setDuration(d),
             onEnded: () => handleTrackEndRef.current(),
@@ -306,46 +313,45 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     }, [currentTrack, currentTime, duration]);
 
 
-    const handleTrackEnd = useCallback(() => {
-        setCurrentTrack(prev => {
-            setQueueRaw(q => {
-                if (q.length === 0) return q;
-
-                // Find current index
-                const idx = prev ? q.findIndex(t => t.id === prev.id) : -1;
-
-                let nextTrack: MusicTrack | null = null;
-                // Read playMode from DOM to avoid stale closure
-                const mode = playModeRef.current;
-
-                if (mode === "repeat-one") {
-                    nextTrack = prev;
-                } else if (mode === "shuffle") {
-                    const randomIdx = Math.floor(Math.random() * q.length);
-                    nextTrack = q[randomIdx];
-                } else {
-                    // sequence
-                    const nextIdx = idx + 1;
-                    if (nextIdx < q.length) {
-                        nextTrack = q[nextIdx];
-                    }
-                }
-
-                if (nextTrack) {
-                    // Defer to avoid state conflicts
-                    setTimeout(() => loadAndPlay(nextTrack!), 0);
-                }
-                return q;
-            });
-            return prev;
-        });
-    }, []);
-
     const playModeRef = useRef(playMode);
     useEffect(() => { playModeRef.current = playMode; }, [playMode]);
 
+    // 播放结束 → 按播放模式自动切下一首。
+    // 注意：这里必须只读 ref、只做副作用，不能把 setState 套进另一个 setState 的
+    // updater 里（原来的写法在 React 18 下 updater 可能不执行，导致一首歌放完就停）。
+    const handleTrackEnd = useCallback(() => {
+        const q = queueRef.current;
+        if (q.length === 0) {
+            setIsPlaying(false);
+            return;
+        }
+        const cur = currentTrackRef.current;
+        const idx = cur ? q.findIndex(t => t.id === cur.id) : -1;
+        const mode = playModeRef.current;
+
+        let nextTrack: MusicTrack | null = null;
+        if (mode === "repeat-one") {
+            nextTrack = cur;
+        } else if (mode === "shuffle") {
+            nextTrack = q.length > 1
+                ? q[Math.floor(Math.random() * q.length)]
+                : q[0];
+        } else {
+            const nextIdx = idx < 0 ? 0 : idx + 1;
+            nextTrack = nextIdx < q.length ? q[nextIdx] : null;
+        }
+
+        if (nextTrack) {
+            loadAndPlayRef.current(nextTrack);
+        } else {
+            setIsPlaying(false);
+            setCurrentTime(durationRef.current || 0);
+        }
+    }, []);
+
     // Latest end-handler for the audio element / YT engine callbacks.
     useEffect(() => { handleTrackEndRef.current = handleTrackEnd; }, [handleTrackEnd]);
+    useEffect(() => { queueRef.current = queue; }, [queue]);
 
     const cleanupBlobUrl = useCallback(() => {
         if (blobUrlRef.current) {
@@ -359,16 +365,21 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         if (!audio) return;
         let track = trackInput;
 
+        switchingRef.current = true;
         cleanupBlobUrl();
         audio.pause();
+
+        // 先把当前歌曲切过去（歌名/封面/进度条立即变化），再去解析播放地址。
+        // 否则在线歌曲要等接口返回 1~2 秒，看起来像「点了没反应」。
+        activeEngineRef.current = "audio";
+        setCurrentTrack(track);
+        setCurrentTime(0);
+        setDuration(track.duration || 0);
 
         // ── YouTube: hidden IFrame engine ──
         if (track.source === "youtube" || track.id.startsWith("yt_")) {
             activeEngineRef.current = "yt";
             const videoId = track.externalId || track.id.replace(/^yt_/, "");
-            setCurrentTrack(track);
-            setCurrentTime(0);
-            setDuration(track.duration || 0);
             setIsPlaying(false);
             const playedAt = new Date().toISOString();
             void markTrackPlayed(track.id, playedAt).catch(() => undefined);
@@ -376,12 +387,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
                 await ytEngine.load(videoId);
             } catch {
                 notifyPlaybackError("YouTube 播放器加载失败，请检查网络后重试");
+            } finally {
+                switchingRef.current = false;
             }
             return;
         }
 
         // ── Everything else goes through the HTMLAudioElement ──
-        activeEngineRef.current = "audio";
         ytEngine.pause();
         fallbackTriedRef.current = false;
 
@@ -404,6 +416,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             }
             if (!playUrl) {
                 notifyPlaybackError("该歌曲暂无可用播放源");
+                switchingRef.current = false;
+                setIsPlaying(false);
                 return;
             }
             audio.src = playUrl;
@@ -442,6 +456,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
                 audio.src = track.sampleUrl;
             } else {
                 notifyPlaybackError("该 DLsite 作品没有试听片段，可上传购买的正版 MP3 绑定后播放");
+                switchingRef.current = false;
                 return;
             }
         } else if (track.source === "reddit") {
@@ -452,12 +467,17 @@ export function MusicProvider({ children }: { children: ReactNode }) {
                 fallbackTriedRef.current = true;
             } else {
                 notifyPlaybackError("该 Reddit 帖子没有可播放的音轨");
+                switchingRef.current = false;
                 return;
             }
         } else {
             // Local tracks: load blob from IndexedDB
             const blob = await getAudioBlob(track.id);
-            if (!blob) return;
+            if (!blob) {
+                switchingRef.current = false;
+                setIsPlaying(false);
+                return;
+            }
             const url = URL.createObjectURL(blob);
             blobUrlRef.current = url;
             audio.src = url;
@@ -477,8 +497,12 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             await audio.play();
         } catch {
             // Autoplay blocked — user interaction needed
+        } finally {
+            switchingRef.current = false;
         }
     }, [cleanupBlobUrl, notifyPlaybackError]);
+
+    useEffect(() => { loadAndPlayRef.current = (t) => { void loadAndPlay(t); }; }, [loadAndPlay]);
 
     const playTrack = useCallback((track: MusicTrack) => {
         setFloatDismissed(false);
@@ -493,12 +517,16 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         activeEngineRef.current = "audio";
         ytEngine.pause();
         fallbackTriedRef.current = false;
+        switchingRef.current = true;
         cleanupBlobUrl();
         audio.pause();
         audio.src = url;
         setCurrentTrack(track);
         setCurrentTime(0);
-        audio.play().catch(() => {});
+        setDuration(track.duration || 0);
+        audio.play()
+            .catch(() => {})
+            .finally(() => { switchingRef.current = false; });
     }, [cleanupBlobUrl]);
 
     const pause = useCallback(() => {
@@ -598,6 +626,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const stop = useCallback(() => {
+        switchingRef.current = false;
         const audio = audioRef.current;
         if (audio) {
             audio.pause();

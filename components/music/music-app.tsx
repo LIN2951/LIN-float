@@ -1017,7 +1017,7 @@ function MineTab({ player, formatTime, onPlayNetease, onPlayAll, activePlaylist,
                                     {topArtist && <div className="music-week-sub">最常听：{topArtist}</div>}
                                     <div className="music-week-bars">
                                         {topSongs.map(r => (
-                                            <div key={r.song.id} className="music-week-bar" title={r.song.name + " · " + r.playCount + "次"} onClick={() => onPlayNetease(r.song)}>
+                                            <div key={r.song.id} className="music-week-bar" title={r.song.name + " · " + r.playCount + "次"} onClick={() => onPlayNetease(r.song, topSongs.map(item => item.song))}>
                                                 <i style={{ height: Math.max(12, Math.round(r.playCount / maxPlay * 100)) + "%" }} />
                                                 <span>{r.song.name.slice(0, 4)}</span>
                                             </div>
