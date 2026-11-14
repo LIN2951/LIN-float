@@ -317,8 +317,10 @@ export const PhoneChatApp = memo(function PhoneChatApp({ onClose, initialSession
             {chatAppCSS && <SessionCustomCSS css={chatAppCSS} scope=".chat-app" />}
             {/* The Main Content Area */}
             <div className="chat-main-content relative flex-1 flex flex-col overflow-hidden" {...(activeSession || activeMascot ? { "data-covered-by-room": "" } : {})}>
-                {activeTab === "messages" && <ChatMessageList onCloseApp={onClose} activeSession={activeSession} onSelectSession={(session) => { setActiveMascot(false); setActiveSession(session); }} onSelectMascot={handleSelectMascot} />}
-                {activeTab === "contacts" && (
+                <div style={{ display: activeTab === "messages" ? undefined : "none" }} className="contents-tab">
+                    <ChatMessageList onCloseApp={onClose} activeSession={activeSession} onSelectSession={(session) => { setActiveMascot(false); setActiveSession(session); }} onSelectMascot={handleSelectMascot} />
+                </div>
+                <div style={{ display: activeTab === "contacts" ? undefined : "none" }} className="contents-tab">
                     <ChatContactsList
                         onCloseApp={onClose}
                         onSelectSession={handleSelectContact}
@@ -341,9 +343,13 @@ export const PhoneChatApp = memo(function PhoneChatApp({ onClose, initialSession
                             setActiveTab("messages");
                         }}
                     />
-                )}
-                {activeTab === "feeds" && <MomentsFeed onCloseApp={onClose} onUserPublished={onMomentPublished} />}
-                {activeTab === "me" && <UserProfilePanel onClose={() => setActiveTab("messages")} />}
+                </div>
+                <div style={{ display: activeTab === "feeds" ? undefined : "none" }} className="contents-tab">
+                    <MomentsFeed onCloseApp={onClose} onUserPublished={onMomentPublished} />
+                </div>
+                <div style={{ display: activeTab === "me" ? undefined : "none" }} className="contents-tab">
+                    <UserProfilePanel onClose={() => setActiveTab("messages")} />
+                </div>
             </div>
 
             {/* Bottom Navigation Bar — hide when inside a chat room */}

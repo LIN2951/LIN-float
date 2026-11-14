@@ -263,8 +263,13 @@ export type NeteasePlayInfo = {
     reason: string;
 };
 
+// 网易云播放地址内存缓存：同一首歌二次点击秒出，避免反复请求 /song/url。
+const neteasePlayInfoCache = new Map<number, NeteasePlayInfo>();
+
 /** Get playable URL for a Netease song, with a concrete failure reason. */
 export async function getNeteasePlayInfo(songId: number): Promise<NeteasePlayInfo> {
+    const cached = neteasePlayInfoCache.get(songId);
+    if (cached) return cached;
     const base = neteaseBase();
     if (!base) return { url: null, trial: false, reason: "音乐 API 未配置" };
     try {
@@ -272,26 +277,32 @@ export async function getNeteasePlayInfo(songId: number): Promise<NeteasePlayInf
         const data = await resp.json();
         const d = data?.data?.[0];
         const url = d?.url;
+        let result: NeteasePlayInfo;
         if (url && typeof url === "string") {
             // Netease returns http:// CDN links; on an HTTPS page the browser blocks
             // them as mixed content, so the audio never loads. The CDN serves https.
-            return { url: url.replace(/^http:\/\//, "https://"), trial: !!d?.freeTrialInfo, reason: "" };
+            result = { url: url.replace(/^http:\/\//, "https://"), trial: !!d?.freeTrialInfo, reason: "" };
+        } else {
+            const fee = d?.fee;
+            const loggedIn = !!loadNeteaseCookie();
+            if (fee === 1) {
+                result = { url: null, trial: false, reason: loggedIn ? "VIP 歌曲，当前账号没有黑胶会员" : "VIP 歌曲，请先在设置中登录网易云账号" };
+            } else if (fee === 4) {
+                result = { url: null, trial: false, reason: "付费专辑歌曲，需购买后才能播放" };
+            } else {
+                // Ask check/music for a human-readable reason (e.g. 无版权)
+                try {
+                    const chk = await fetch(withNeteaseParams(`${base}/check/music?id=${songId}&timestamp=${Date.now()}`)).then(r => r.json());
+                    const msg = chk?.message ? String(chk.message).replace(/^亲爱的[,，]?/, "").trim() : "";
+                    if (chk?.success === false && msg) result = { url: null, trial: false, reason: msg };
+                    else result = { url: null, trial: false, reason: "该歌曲暂时无法播放" };
+                } catch {
+                    result = { url: null, trial: false, reason: "该歌曲暂时无法播放" };
+                }
+            }
         }
-        const fee = d?.fee;
-        const loggedIn = !!loadNeteaseCookie();
-        if (fee === 1) {
-            return { url: null, trial: false, reason: loggedIn ? "VIP 歌曲，当前账号没有黑胶会员" : "VIP 歌曲，请先在设置中登录网易云账号" };
-        }
-        if (fee === 4) {
-            return { url: null, trial: false, reason: "付费专辑歌曲，需购买后才能播放" };
-        }
-        // Ask check/music for a human-readable reason (e.g. 无版权)
-        try {
-            const chk = await fetch(withNeteaseParams(`${base}/check/music?id=${songId}&timestamp=${Date.now()}`)).then(r => r.json());
-            const msg = chk?.message ? String(chk.message).replace(/^亲爱的[,，]?/, "").trim() : "";
-            if (chk?.success === false && msg) return { url: null, trial: false, reason: msg };
-        } catch { /* check endpoint unavailable — fall through */ }
-        return { url: null, trial: false, reason: "该歌曲暂时无法播放" };
+        neteasePlayInfoCache.set(songId, result);
+        return result;
     } catch (e) {
         console.warn("[MusicService] Get play URL failed:", e);
         return { url: null, trial: false, reason: "网络异常，加载失败" };
