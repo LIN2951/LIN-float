@@ -219,13 +219,12 @@ async function prepareDesktopThemeForFirstPaint(): Promise<PreparedDesktopTheme>
 export function MainApp() {
   const [preparedDesktopTheme, setPreparedDesktopTheme] = useState<PreparedDesktopTheme | null>(null);
   const [hydrated, setHydrated] = useState(false);
-  // 「隐藏锁屏」要在首帧就跳过锁屏渲染（同步读 localStorage 镜像），
-  // 避免先渲染 SplashScreen 再被 useLayoutEffect 撤掉造成锁屏闪现与白屏。
-  const [splashDismissed, setSplashDismissed] = useState(() => loadLockScreenHiddenSync());
+  const [splashDismissed, setSplashDismissed] = useState(false);
   const [kvHydrateFailed, setKvHydrateFailed] = useState(false);
   const [initAttempt, setInitAttempt] = useState(0);
 
-  // 兜底：若 KV 水合完成后发现「隐藏锁屏」为真，再次确保跳过锁屏。
+  // 「隐藏锁屏」要在浏览器绘制前就跳过锁屏，才能做到无闪现、丝滑进桌面。
+  // 用 useLayoutEffect 读同步 localStorage（首帧即可用），又不会造成 hydration 不一致。
   useLayoutEffect(() => {
     if (loadLockScreenHiddenSync()) setSplashDismissed(true);
   }, []);
