@@ -484,17 +484,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             if (src === "free") {
                 playUrl = await getFreePlayUrl(track, bases);
             } else {
-                // 并发请求网易云与免费聚合源，谁先返回有效地址就用谁，
-                // 避免「网易云返回 null 再去问免费源」的串行等待导致切歌慢。
-                const neteasePromise = getNeteasePlayUrl(nid);
-                const freePromise = getFreePlayUrl(track, bases);
-                playUrl = await Promise.race([
-                    neteasePromise.then(url => url || Promise.reject(new Error("netease null"))),
-                    freePromise.then(url => url || Promise.reject(new Error("free null"))),
-                ]).catch(() => null);
-                if (!playUrl) {
-                    playUrl = (await neteasePromise.catch(() => null)) || (await freePromise.catch(() => null));
-                }
+                playUrl = await getNeteasePlayUrl(nid);
+                // Netease returned nothing (VIP / no copyright) — try the free
+                // aggregation source so the song can still play fully.
+                if (!playUrl) playUrl = await getFreePlayUrl(track, bases);
             }
             if (token !== switchTokenRef.current) return; // 期间又切了别的歌
             if (!playUrl) {

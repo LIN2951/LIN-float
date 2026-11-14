@@ -7277,8 +7277,3 @@
   background: currentColor;
   animation: chat-stream-cursor-blink 1s steps(2, start) infinite;
 }
-
-/* 主页「回车发送 / 来电振动」开关：开启态改为灰色，去掉突兀的绿色 */
-.ui-toggle.profile-gray-toggle[data-checked] {
-  background: #b5b5bd;
-}

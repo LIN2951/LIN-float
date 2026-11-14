@@ -193,17 +193,8 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
     const [showPushSettings, setShowPushSettings] = useState(false);
     const [showGlobalChatInfo, setShowGlobalChatInfo] = useState(false);
     const profileAvatarInputRef = useRef<HTMLInputElement>(null);
-    const profileBgInputRef = useRef<HTMLInputElement>(null);
-    // 主页顶部背景图 + 蒙版数值
-    const [profileBgUrl, setProfileBgUrl] = useState<string>(() => {
-        try { return kvGet("chat_profile_bg_url") || ""; } catch { return ""; }
-    });
-    const [profileBgMask, setProfileBgMask] = useState<number>(() => {
-        try { return Number(kvGet("chat_profile_bg_mask")) || 25; } catch { return 25; }
-    });
-    // 同步初始化，避免挂载后再异步 set 导致开关出现「开→关」动画
-    const [enterToSendEnabled, setEnterToSendEnabled] = useState(() => loadChatAppSettings().enterToSendEnabled === true);
-    const [callVibrationEnabled, setCallVibrationEnabled] = useState(() => loadChatAppSettings().callVibrationEnabled !== false);
+    const [enterToSendEnabled, setEnterToSendEnabled] = useState(false);
+    const [callVibrationEnabled, setCallVibrationEnabled] = useState(true);
     const [userStats, setUserStats] = useState({ chats: 0, moments: 0, visitors: 1234 });
     const [walletSummary, setWalletSummary] = useState(() => {
         const wallet = loadWalletState();
@@ -266,51 +257,6 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
             console.error("更新用户资料头像失败", error);
             window.alert("头像读取失败，请换一张图片后重试");
         }
-    };
-
-    // 主页顶部背景图：裁剪到固定宽高比（16:9）再保存，确保铺满不留白
-    const PROFILE_BG_ASPECT = 16 / 9;
-    const handleProfileBgChange = (file?: File) => {
-        if (!file) return;
-        const objectUrl = URL.createObjectURL(file);
-        const img = new Image();
-        img.onload = () => {
-            URL.revokeObjectURL(objectUrl);
-            // 以「覆盖」方式裁剪：取居中区域，比例为 16:9
-            const srcW = img.width, srcH = img.height;
-            const targetH = srcW / PROFILE_BG_ASPECT;
-            let sx = 0, sy = 0, sw = srcW, sh = srcH;
-            if (targetH > srcH) {
-                // 原图太矮，按高度裁宽度
-                sw = srcH * PROFILE_BG_ASPECT;
-                sx = (srcW - sw) / 2;
-                sh = srcH;
-            } else {
-                sh = targetH;
-                sy = (srcH - sh) / 2;
-            }
-            const outW = 960;
-            const outH = Math.round(outW / PROFILE_BG_ASPECT);
-            const canvas = document.createElement("canvas");
-            canvas.width = outW;
-            canvas.height = outH;
-            const ctx = canvas.getContext("2d");
-            if (!ctx) { window.alert("图片处理失败"); return; }
-            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
-            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-            try { kvSet("chat_profile_bg_url", dataUrl); } catch { /* ignore quota */ }
-            setProfileBgUrl(dataUrl);
-        };
-        img.onerror = () => {
-            URL.revokeObjectURL(objectUrl);
-            window.alert("背景图读取失败，请换一张图片后重试");
-        };
-        img.src = objectUrl;
-    };
-
-    const handleProfileBgMaskChange = (value: number) => {
-        setProfileBgMask(value);
-        try { kvSet("chat_profile_bg_mask", String(value)); } catch { /* ignore */ }
     };
 
     useEffect(() => {
@@ -442,50 +388,9 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                 className={`user-profile-page-root ${className || ""}`}
             >
                 <div className="relative z-[1] w-full max-w-2xl mx-auto flex flex-col pb-8">
-                    {/* 顶部背景图：点击可从相册选图，自动裁剪为 16:9 铺满 */}
-                    <button
-                        type="button"
-                        className="relative w-full overflow-hidden text-left"
-                        style={{ aspectRatio: `${PROFILE_BG_ASPECT}`, cursor: "pointer" }}
-                        onClick={() => profileBgInputRef.current?.click()}
-                        aria-label="更换主页顶部背景图"
-                        title="点击更换背景图"
-                    >
-                        {profileBgUrl ? (
-                            <img
-                                src={profileBgUrl}
-                                alt="主页背景"
-                                className="absolute inset-0 w-full h-full object-cover"
-                                draggable={false}
-                            />
-                        ) : (
-                            <div
-                                className="absolute inset-0 flex items-center justify-center"
-                                style={{ background: "linear-gradient(135deg, #dfeaf3 0%, #eef2f7 100%)", color: "rgba(0,0,0,0.35)", fontSize: "13px" }}
-                            >
-                                点击添加背景图
-                            </div>
-                        )}
-                        {/* 蒙版：数值越大越暗，保证文字可读 */}
-                        <div
-                            className="absolute inset-0 pointer-events-none"
-                            style={{ background: `rgba(0, 0, 0, ${profileBgMask / 100})` }}
-                        />
-                        <input
-                            ref={profileBgInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={event => {
-                                const file = event.target.files?.[0];
-                                event.target.value = "";
-                                handleProfileBgChange(file);
-                            }}
-                        />
-                    </button>
-
+                    
                     {/* User Info & Stats Block */}
-                    <div className="flex items-center gap-5 px-6 pt-2 pb-4" style={{ marginTop: -44, position: "relative", zIndex: 2 }}>
+                    <div className="flex items-center gap-5 px-6 pt-2 pb-4">
                         {/* Avatar */}
                         <div className="relative shrink-0">
                             <button
@@ -619,32 +524,13 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                     {/* 输入与提醒 */}
                     <div className="mx-4 mb-4 bg-[var(--c-card)] rounded-2xl px-4 py-1 flex flex-col"
                          style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.025)" }}>
-                        {/* 顶部背景蒙版浓度 */}
-                        <div className="flex items-center gap-3 py-3 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]">
-                            <SlidersHorizontal size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
-                            <div className="flex flex-col flex-1 text-left gap-0.5">
-                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">背景蒙版浓度</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">数值越大背景越暗，保证头像与文字清晰可读</span>
-                            </div>
-                            <input
-                                type="range"
-                                min={0}
-                                max={80}
-                                step={5}
-                                value={profileBgMask}
-                                onChange={(e) => handleProfileBgMaskChange(Number(e.target.value))}
-                                className="w-[110px] accent-[var(--c-primary)]"
-                                style={{ cursor: "pointer" }}
-                            />
-                        </div>
-
                         <div className="flex items-center gap-3 py-3 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]">
                             <Keyboard size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
                             <div className="flex flex-col flex-1 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">回车发送</span>
                                 <span className="ts-11 text-[var(--c-text)] opacity-70">开启后 Enter 发送，Shift+Enter 换行</span>
                             </div>
-                            <Toggle checked={enterToSendEnabled} onChange={handleEnterToSendToggle} className="profile-gray-toggle" />
+                            <Toggle checked={enterToSendEnabled} onChange={handleEnterToSendToggle} />
                         </div>
 
                         <div className="flex items-center gap-3 py-3 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]">
@@ -653,7 +539,7 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">语音/视频来电振动</span>
                                 <span className="ts-11 text-[var(--c-text)] opacity-70">角色来电等待接听时手机振动（iOS 网页不支持振动）</span>
                             </div>
-                            <Toggle checked={callVibrationEnabled} onChange={handleCallVibrationToggle} className="profile-gray-toggle" />
+                            <Toggle checked={callVibrationEnabled} onChange={handleCallVibrationToggle} />
                         </div>
 
                         <div className="flex items-center gap-3 py-3 w-full">
