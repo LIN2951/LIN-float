@@ -32,7 +32,7 @@ import {
     MUSIC_BG_EVENT, type MusicBgConfig, type MusicPlayerBgMode,
     loadMusicFloatMode, saveMusicFloatMode, type MusicFloatMode,
     loadMusicFloatSizes, saveMusicFloatSizes, normalizeMusicFloatSizes,
-    MUSIC_FLOAT_SIZE_LIMITS, type MusicFloatSizes,
+    MUSIC_FLOAT_SIZE_LIMITS, DEFAULT_MUSIC_FLOAT_SIZES, type MusicFloatSizes,
     loadMusicFloatVisibility, saveMusicFloatVisibility, type MusicFloatVisibility,
     loadMusicTheme, saveMusicTheme, applyMusicTheme, type MusicTheme,
 } from "@/lib/music-bg";
@@ -1616,6 +1616,27 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
         setFloatSizes(next);
     };
 
+    const resetOrbSizes = () => {
+        const next = normalizeMusicFloatSizes({
+            ...floatSizes,
+            orb: DEFAULT_MUSIC_FLOAT_SIZES.orb,
+            orbCardWidth: DEFAULT_MUSIC_FLOAT_SIZES.orbCardWidth,
+            orbCardHeight: DEFAULT_MUSIC_FLOAT_SIZES.orbCardHeight,
+        });
+        saveMusicFloatSizes(next);
+        setFloatSizes(next);
+    };
+
+    const resetIslandSizes = () => {
+        const next = normalizeMusicFloatSizes({
+            ...floatSizes,
+            islandWidth: DEFAULT_MUSIC_FLOAT_SIZES.islandWidth,
+            islandHeight: DEFAULT_MUSIC_FLOAT_SIZES.islandHeight,
+        });
+        saveMusicFloatSizes(next);
+        setFloatSizes(next);
+    };
+
     // Backstage float visibility (hide without stopping music)
     const [floatVisible, setFloatVisible] = useState<MusicFloatVisibility>(() => loadMusicFloatVisibility());
     const applyFloatVisible = (patch: Partial<MusicFloatVisibility>) => {
@@ -1885,6 +1906,7 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                                 step={MUSIC_FLOAT_SIZE_LIMITS.orbCardHeight.step}
                                 onChange={(v) => applyFloatSize("orbCardHeight", v)}
                             />
+                            <button className="music-bg-mode music-float-size-reset" onClick={resetOrbSizes}>恢复默认大小</button>
                         </div>
                         <div className="music-float-size-group">
                             <div className="music-float-size-group-title">灵动岛</div>
@@ -1904,6 +1926,7 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                                 step={MUSIC_FLOAT_SIZE_LIMITS.islandHeight.step}
                                 onChange={(v) => applyFloatSize("islandHeight", v)}
                             />
+                            <button className="music-bg-mode music-float-size-reset" onClick={resetIslandSizes}>恢复默认大小</button>
                         </div>
                     </div>
 

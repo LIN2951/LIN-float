@@ -7,7 +7,6 @@ import { CloudBackupScheduler } from "@/components/cloud-backup-scheduler";
 import { RealityBridgeScheduler } from "@/components/reality-bridge-scheduler";
 import { MediaMaintenanceScheduler } from "@/components/media-maintenance-scheduler";
 import { DesktopShell } from "./desktop-shell";
-import { OfflinePushRevampAnnouncement } from "./offline-push-revamp-announcement";
 import { LockScreen } from "./lock-screen";
 import { MusicProvider } from "@/lib/music-context";
 import { hydrateKvDb, isKvHydrated } from "@/lib/kv-db";
@@ -317,7 +316,6 @@ export function MainApp() {
               initialThemeProfile={preparedDesktopTheme?.profile}
               initialThemeAssets={preparedDesktopTheme?.assets}
             />
-            <OfflinePushRevampAnnouncement />
             <CloudBackupScheduler />
             <RealityBridgeScheduler />
             <MediaMaintenanceScheduler />

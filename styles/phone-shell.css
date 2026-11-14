@@ -143,10 +143,7 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-color: #c2e2f0;
-  background-image:
-    radial-gradient(ellipse 160% 140% at 90% 0%, rgba(60, 130, 210, 0.75) 0%, rgba(90, 160, 225, 0.35) 40%, transparent 80%),
-    radial-gradient(ellipse 160% 140% at 5% 100%, rgba(100, 218, 195, 0.4) 0%, rgba(150, 235, 218, 0.15) 40%, transparent 80%);
+  background-color: #ffffff;
   background-repeat: no-repeat;
   background-position: center;
   background-size: cover;

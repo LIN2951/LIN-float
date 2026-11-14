@@ -505,16 +505,17 @@ function MusicFloatIsland({
     const progressPct = player.duration > 0 ? clampValue(player.currentTime / player.duration, 0, 1) * 100 : 0;
     const textColorValue = textColor || "#2b2b33";
 
-    // 隐藏态：仅在顶部留一个极小的透明感应区，双击右滑可唤回
+    // 隐藏态：仅在顶部留一个透明感应区，双击右滑可唤回
     if (hidden) {
         return (
             <div
                 className="music-island-root"
+                data-hidden
                 onPointerDown={beginSwipe}
                 onPointerMove={moveSwipe}
                 onPointerUp={finishSwipe}
                 onPointerCancel={cancelSwipe}
-                style={{ height: 28, cursor: "pointer" }}
+                style={{ height: 22, cursor: "pointer" }}
             >
                 <div className="music-status-island-hidden-target" />
             </div>

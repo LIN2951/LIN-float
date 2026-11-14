@@ -129,7 +129,6 @@ import {
 import { WidgetRenderer } from "@/components/widgets/widget-renderer";
 import type { DIYWidgetTemplate } from "@/lib/widget-types";
 import { DebugPromptPanel } from "@/components/debug-prompt-panel";
-import { QuickActionFloat } from "@/components/quick-action-float";
 import { CHAT_MESSAGE_PUSHED_EVENT, CHAT_REQUEST_REPLY_EVENT, findChatSessionById, hydrateChatStorage, loadChatSessions, loadChatMessages, loadChatAppSettings, pushChatMessage, type ChatMessage, type ChatSession } from "@/lib/chat-storage";
 import { ensureGlobalBindingDefaults, resolveUserIdentity } from "@/lib/settings-storage";
 import { loadCharacters } from "@/lib/character-storage";
@@ -4867,7 +4866,6 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                 </footer>
               ) : null}
               <DebugPromptPanel />
-              <QuickActionFloat />
               <MascotFloat />
               {/* 预览弹窗宿主：独立于桌宠的展开/收起状态，否则桌宠收成小球时弹不出来 */}
               <MascotPreviewHost />
