@@ -27,9 +27,11 @@ import {
     MUSIC_ISLAND_COLOR_EVENT,
     hexToRgba,
     islandColorValue,
+    islandTextColorValue,
     loadMusicIslandColor,
     resolveTrackAccent,
     type MusicIslandColorSettings,
+    type MusicIslandTextLines,
 } from "@/lib/music-island-color";
 
 /** Controls plus the high-frequency currentTime needed by the cards. */
@@ -328,6 +330,8 @@ function MusicFloatIsland({
     hideWave,
     accent,
     accentSoft,
+    textLines,
+    textColor,
 }: {
     player: MusicFloatPlayer;
     sizes: MusicFloatSizes;
@@ -336,16 +340,22 @@ function MusicFloatIsland({
     hideWave?: boolean;
     accent?: string;
     accentSoft?: string;
+    textLines?: MusicIslandTextLines;
+    textColor?: string;
 }) {
     const [expanded, setExpanded] = useState(false); // false = pill, true = card
     const [closing, setClosing] = useState(false);
     const [swipeHint, setSwipeHint] = useState<{ dir: "prev" | "next"; title: string } | null>(null);
+    const [hidden, setHidden] = useState(false); // 双击左滑隐藏，双击右滑显示
     const retractTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const actionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const suppressClickRef = useRef(false);
     const swipeRef = useRef({ active: false, x: 0, y: 0, dx: 0, moved: false, pointerId: 0, captured: false });
+    // 双击滑动检测：记录上一次滑动的方向和时间，快速连续两次同方向即触发隐藏/显示
+    const lastSwipeRef = useRef<{ dir: "prev" | "next"; ts: number } | null>(null);
+    const DOUBLE_SWIPE_MS = 500;
 
     useEffect(() => () => {
         if (retractTimerRef.current) clearTimeout(retractTimerRef.current);
@@ -381,6 +391,22 @@ function MusicFloatIsland({
     };
 
     const runSwipe = (dir: "prev" | "next") => {
+        const now = Date.now();
+        const last = lastSwipeRef.current;
+        const isDouble = !!last && last.dir === dir && now - last.ts < DOUBLE_SWIPE_MS;
+        lastSwipeRef.current = { dir, ts: now };
+
+        // 双击同方向：左滑隐藏灵动岛，右滑唤回灵动岛
+        if (isDouble) {
+            if (dir === "prev") {
+                setHidden(true);
+                setExpanded(false);
+            } else {
+                setHidden(false);
+            }
+            return;
+        }
+
         const target = neighborTrack(dir);
         setSwipeHint({ dir, title: target?.title || "" });
         if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
@@ -477,6 +503,23 @@ function MusicFloatIsland({
     };
 
     const progressPct = player.duration > 0 ? clampValue(player.currentTime / player.duration, 0, 1) * 100 : 0;
+    const textColorValue = textColor || "#2b2b33";
+
+    // 隐藏态：仅在顶部留一个极小的透明感应区，双击右滑可唤回
+    if (hidden) {
+        return (
+            <div
+                className="music-island-root"
+                onPointerDown={beginSwipe}
+                onPointerMove={moveSwipe}
+                onPointerUp={finishSwipe}
+                onPointerCancel={cancelSwipe}
+                style={{ height: 28, cursor: "pointer" }}
+            >
+                <div className="music-status-island-hidden-target" />
+            </div>
+        );
+    }
 
     return (
         <div
@@ -484,6 +527,7 @@ function MusicFloatIsland({
             style={{
                 "--mi-accent": accent || "#ffffff",
                 "--mi-accent-soft": accentSoft || "rgba(255, 255, 255, 0.08)",
+                "--mi-text": textColorValue,
             } as React.CSSProperties}
         >
             {!expanded && (
@@ -517,7 +561,12 @@ function MusicFloatIsland({
                                     </span>
                                 )}
                             </span>
-                            <span className="music-status-island-title">{player.currentTrack?.title}</span>
+                            <span className="music-status-island-text">
+                                <span className="music-status-island-title">{player.currentTrack?.title}</span>
+                                {textLines === 2 && (
+                                    <span className="music-status-island-subtitle">{player.currentTrack?.artist}</span>
+                                )}
+                            </span>
                             {!hideWave && <WaveBars playing={player.isPlaying} />}
                         </>
                     )}
@@ -692,7 +741,7 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
 
     return (
         <>
-            {active && !shouldHide && visible.orb && (mode === "orb" || mode === "both") && (
+            {active && !shouldHide && visible.orb && (
                 <MusicFloatOrb
                     player={active}
                     sizes={sizes}
@@ -701,7 +750,7 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
                     accentSoft={accentSoft}
                 />
             )}
-            {active && !shouldHide && visible.island && (mode === "island" || mode === "both") && (
+            {active && !shouldHide && visible.island && (
                 <MusicFloatIsland
                     player={active}
                     sizes={sizes}
@@ -710,6 +759,8 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
                     hideWave={islandColor.hideWave}
                     accent={accent}
                     accentSoft={accentSoft}
+                    textLines={islandColor.textLines}
+                    textColor={islandTextColorValue(islandColor.textColor)}
                 />
             )}
             <MusicDesktopLyrics

@@ -38,6 +38,7 @@ import {
 } from "@/lib/music-bg";
 import {
     ISLAND_COLORS,
+    ISLAND_TEXT_COLORS,
     loadMusicIslandColor,
     saveMusicIslandColor,
     type MusicIslandColorSettings,
@@ -1850,10 +1851,12 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                     <div className="music-settings-label">音乐悬浮窗样式</div>
                     <div className="music-settings-hint">播放音乐后回到桌面显示；切换即时生效，刷新后保留选择</div>
                     <div className="music-bg-modes">
-                        <button className="music-bg-mode" {...(floatMode === "both" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("both")}>同时显示</button>
-                        <button className="music-bg-mode" {...(floatMode === "orb" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("orb")}>仅悬浮球</button>
-                        <button className="music-bg-mode" {...(floatMode === "island" ? { "data-on": "" } : {})} onClick={() => applyFloatMode("island")}>仅灵动岛</button>
+                        <button className="music-bg-mode" {...(floatVisible.orb && floatVisible.island ? { "data-on": "" } : {})} onClick={() => applyFloatVisible({ orb: true, island: true })}>同时显示</button>
+                        <button className="music-bg-mode" {...(floatVisible.orb && !floatVisible.island ? { "data-on": "" } : {})} onClick={() => applyFloatVisible({ orb: true, island: false })}>仅悬浮球</button>
+                        <button className="music-bg-mode" {...(!floatVisible.orb && floatVisible.island ? { "data-on": "" } : {})} onClick={() => applyFloatVisible({ orb: false, island: true })}>仅灵动岛</button>
+                        <button className="music-bg-mode" {...(!floatVisible.orb && !floatVisible.island ? { "data-on": "" } : {})} onClick={() => applyFloatVisible({ orb: false, island: false })}>全部隐藏</button>
                     </div>
+                    <div className="music-settings-hint">提示：在灵动岛上快速双击左滑可临时隐藏，双击右滑唤回</div>
 
                     <div className="music-float-size-grid">
                         <div className="music-float-size-group">
@@ -1904,20 +1907,6 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                         </div>
                     </div>
 
-                    <div className="music-float-visibility-row">
-                        <label className="music-float-switch">
-                            <span>隐藏悬浮球</span>
-                            <input type="checkbox" checked={!floatVisible.orb} onChange={(e) => applyFloatVisible({ orb: !e.target.checked })} />
-                            <i />
-                        </label>
-                        <label className="music-float-switch">
-                            <span>隐藏灵动岛</span>
-                            <input type="checkbox" checked={!floatVisible.island} onChange={(e) => applyFloatVisible({ island: !e.target.checked })} />
-                            <i />
-                        </label>
-                    </div>
-                    <div className="music-settings-hint">隐藏后歌曲继续在后台播放，在设置里重新开启即可恢复显示</div>
-
                     <div className="music-island-color-block">
                         <div className="music-settings-label">灵动岛颜色</div>
                         <div className="music-settings-hint">开启「跟随歌曲取色」后，波浪条和整块灵动岛会随当前歌曲变化颜色；关闭后保持透明玻璃 + 白色波浪条</div>
@@ -1953,6 +1942,28 @@ function MusicSettingsTab({ onBack, onSaved }: { onBack: () => void; onSaved: ()
                             />
                             <i />
                         </label>
+
+                        <div className="music-settings-sub-label">灵动岛收起时显示</div>
+                        <div className="music-bg-modes">
+                            <button className="music-bg-mode" {...(islandColor.textLines === 1 ? { "data-on": "" } : {})} onClick={() => applyIslandColor({ textLines: 1 })}>仅歌名（一行）</button>
+                            <button className="music-bg-mode" {...(islandColor.textLines === 2 ? { "data-on": "" } : {})} onClick={() => applyIslandColor({ textLines: 2 })}>歌名+歌手（两行）</button>
+                        </div>
+
+                        <div className="music-settings-sub-label">灵动岛文字颜色</div>
+                        <div className="music-island-color-row">
+                            {ISLAND_TEXT_COLORS.map(color => (
+                                <button
+                                    key={color.id}
+                                    type="button"
+                                    className="music-island-color-swatch"
+                                    {...(islandColor.textColor === color.id ? { "data-on": "" } : {})}
+                                    style={{ background: color.value }}
+                                    onClick={() => applyIslandColor({ textColor: color.id })}
+                                    title={color.label}
+                                    aria-label={`灵动岛文字颜色：${color.label}`}
+                                />
+                            ))}
+                        </div>
                     </div>
                 </div>
 

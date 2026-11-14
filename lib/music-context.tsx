@@ -6,7 +6,7 @@ import type { MusicTrack } from "./music-storage";
 import { getAudioBlob, markTrackPlayed } from "./music-storage";
 import { findPlayableMatch, getNeteaseLyrics, getNeteasePlayUrl, getNeteasePlayInfo, getNeteaseSongDetail, loadMusicSourceConfig } from "./music-service";
 import { getFreePlayUrl } from "./music-free-source";
-import { kvGet, kvSet, registerKvMigration } from "./kv-db";
+import { kvGet, kvSet, kvRemove, registerKvMigration } from "./kv-db";
 import { registerMusicControlBridge } from "./music-control-bridge";
 import { applyMusicTheme, loadMusicTheme, MUSIC_THEME_EVENT } from "./music-bg";
 import { ytEngine } from "./youtube-engine";
@@ -100,6 +100,27 @@ function persistQueue(q: MusicTrack[]): void {
     try { kvSet(QUEUE_STORAGE_KEY, JSON.stringify(q.slice(0, QUEUE_MAX_SIZE))); } catch { /* ignore */ }
 }
 
+// 上次播放的歌曲：刷新页面或重进音乐后，底部播放条仍显示这首歌（不会自动播放）。
+const LAST_TRACK_KEY = "ai_phone_music_last_track_v1";
+registerKvMigration(LAST_TRACK_KEY);
+
+function loadPersistedLastTrack(): MusicTrack | null {
+    if (typeof window === "undefined") return null;
+    try {
+        const raw = kvGet(LAST_TRACK_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed.id === "string" ? (parsed as MusicTrack) : null;
+    } catch { return null; }
+}
+
+function persistLastTrack(t: MusicTrack | null): void {
+    try {
+        if (t) kvSet(LAST_TRACK_KEY, JSON.stringify(t));
+        else kvRemove(LAST_TRACK_KEY);
+    } catch { /* ignore */ }
+}
+
 // ── Provider ──
 
 export function MusicProvider({ children }: { children: ReactNode }) {
@@ -108,7 +129,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     // Which engine currently owns playback: the <audio> element or hidden YT iframe.
     const activeEngineRef = useRef<"audio" | "yt">("audio");
     const isPlayingRef = useRef(false);
-    const currentTrackRef = useRef<MusicTrack | null>(null);
+    const currentTrackRef = useRef<MusicTrack | null>(loadPersistedLastTrack());
     const currentTimeRef = useRef(0);
     const durationRef = useRef(0);
     const fallbackTriedRef = useRef(false);
@@ -125,7 +146,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     // 点播放绝不能把上一首恢复出来，而要重新装载显示中的这首歌。
     const loadedTrackIdRef = useRef<string | null>(null);
 
-    const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(null);
+    const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(() => loadPersistedLastTrack());
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
@@ -147,6 +168,12 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         persistQueue(queue);
     }, [queue]);
+
+    // Persist the last played track so the bottom bar survives refresh / re-enter.
+    // 注意：只保存歌曲元信息，不保存播放状态；重进后不会自动播放。
+    useEffect(() => {
+        persistLastTrack(currentTrack);
+    }, [currentTrack]);
 
     /** Wrapped setQueue with max size enforcement */
     const setQueue = useCallback((tracks: MusicTrack[]) => {

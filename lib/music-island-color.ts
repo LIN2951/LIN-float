@@ -10,13 +10,19 @@ export const MUSIC_ISLAND_COLOR_EVENT = "music-island-color-change";
 
 export type MusicIslandColorMode = "follow" | "fixed";
 
+export type MusicIslandTextLines = 1 | 2;
+
 export type MusicIslandColorSettings = {
     /** follow = 跟随当前歌曲取色；fixed = 使用下方固定颜色 */
     mode: MusicIslandColorMode;
-    /** 固定色 id（见 ISLAND_COLORS） */
+    /** 固定色 id（见 ISLAND_COLORS），用于波浪条与高亮 */
     color: string;
     /** 隐藏跳动波浪条，只保留灵动岛本体 */
     hideWave: boolean;
+    /** 灵动岛收起胶囊显示的文字行数：1=仅歌名，2=歌名+歌手 */
+    textLines: MusicIslandTextLines;
+    /** 灵动岛文字颜色 id（见 ISLAND_TEXT_COLORS） */
+    textColor: string;
 };
 
 export const ISLAND_COLORS = [
@@ -28,16 +34,39 @@ export const ISLAND_COLORS = [
     { id: "orange", value: "#ffb066", label: "橙" },
 ] as const;
 
+/** 灵动岛文字颜色（白色玻璃背景上以深色为主，另附彩色选项） */
+export const ISLAND_TEXT_COLORS = [
+    { id: "dark", value: "#2b2b33", label: "深灰" },
+    { id: "black", value: "#111111", label: "黑" },
+    { id: "white", value: "#f5f5f5", label: "白" },
+    { id: "blue", value: "#2b6cb0", label: "蓝" },
+    { id: "pink", value: "#c2185b", label: "粉" },
+    { id: "green", value: "#2e7d52", label: "绿" },
+    { id: "purple", value: "#6a3fb5", label: "紫" },
+    { id: "orange", value: "#c2651b", label: "橙" },
+] as const;
+
 export type IslandColorId = typeof ISLAND_COLORS[number]["id"];
+export type IslandTextColorId = typeof ISLAND_TEXT_COLORS[number]["id"];
 
 export const DEFAULT_MUSIC_ISLAND_COLOR: MusicIslandColorSettings = {
     mode: "follow",
     color: "white",
     hideWave: false,
+    textLines: 1,
+    textColor: "dark",
 };
 
 function normalizeColorId(value: unknown, fallback: string): string {
     return ISLAND_COLORS.some(c => c.id === value) ? (value as string) : fallback;
+}
+
+function normalizeTextColorId(value: unknown, fallback: string): string {
+    return ISLAND_TEXT_COLORS.some(c => c.id === value) ? (value as string) : fallback;
+}
+
+function normalizeTextLines(value: unknown): MusicIslandTextLines {
+    return value === 2 ? 2 : 1;
 }
 
 export function loadMusicIslandColor(): MusicIslandColorSettings {
@@ -50,6 +79,8 @@ export function loadMusicIslandColor(): MusicIslandColorSettings {
             mode: parsed.mode === "fixed" ? "fixed" : "follow",
             color: normalizeColorId(parsed.color, DEFAULT_MUSIC_ISLAND_COLOR.color),
             hideWave: parsed.hideWave === true,
+            textLines: normalizeTextLines(parsed.textLines),
+            textColor: normalizeTextColorId(parsed.textColor, DEFAULT_MUSIC_ISLAND_COLOR.textColor),
         };
     } catch {
         return DEFAULT_MUSIC_ISLAND_COLOR;
@@ -61,6 +92,8 @@ export function saveMusicIslandColor(settings: MusicIslandColorSettings): void {
         mode: settings.mode === "fixed" ? "fixed" : "follow",
         color: normalizeColorId(settings.color, DEFAULT_MUSIC_ISLAND_COLOR.color),
         hideWave: settings.hideWave === true,
+        textLines: normalizeTextLines(settings.textLines),
+        textColor: normalizeTextColorId(settings.textColor, DEFAULT_MUSIC_ISLAND_COLOR.textColor),
     };
     try { kvSet(KEY, JSON.stringify(next)); } catch { /* ignore */ }
     if (typeof window !== "undefined") {
@@ -70,6 +103,10 @@ export function saveMusicIslandColor(settings: MusicIslandColorSettings): void {
 
 export function islandColorValue(id: string): string {
     return ISLAND_COLORS.find(c => c.id === id)?.value || "#ffffff";
+}
+
+export function islandTextColorValue(id: string): string {
+    return ISLAND_TEXT_COLORS.find(c => c.id === id)?.value || "#2b2b33";
 }
 
 /** 十六进制颜色 → 带透明度的 rgba 字符串 */
