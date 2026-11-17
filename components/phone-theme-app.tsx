@@ -882,6 +882,52 @@ export function PhoneThemeApp({
             <p style={{ fontSize: "calc(11px*var(--app-text-scale,1))", color: "var(--c-icon)", lineHeight: 1.5, marginTop: -8 }}>
               {"开启后打开应用会丝滑跳过锁屏、直接进入桌面；关闭后恢复锁屏页面。"}
             </p>
+
+            {/* 锁屏壁纸设置 */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+              <div style={{ fontSize: "calc(12px*var(--app-text-scale,1))", color: "var(--c-text-title)", fontWeight: 500 }}>锁屏壁纸</div>
+              <p style={{ fontSize: "calc(11px*var(--app-text-scale,1))", color: "var(--c-icon)", lineHeight: 1.4 }}>上传本地相册照片作为锁屏背景，留空则使用默认灰白渐变。</p>
+              
+              <div style={{ display: "flex", gap: 12 }}>
+                <label
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[var(--c-card-border)] bg-[var(--c-card)] px-3 py-2 text-xs font-medium cursor-pointer transition hover:border-[var(--c-icon-active)] active:scale-95"
+                  style={{ color: "var(--c-text)" }}
+                >
+                  <Upload size={15} />
+                  选择壁纸
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const assetId = await saveThemeAssetFromBlob(file, "wallpaper");
+                        updateLockSettings({ wallpaperAssetId: assetId });
+                        onNotice("锁屏壁纸已更新");
+                      } catch (error) {
+                        onNotice(error instanceof Error ? error.message : "壁纸上传失败");
+                      }
+                    }}
+                  />
+                </label>
+                {lockSettings.wallpaperAssetId && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--c-danger)] bg-transparent px-3 py-2 text-xs font-medium text-[var(--c-danger)] transition active:scale-95"
+                    onClick={() => {
+                      updateLockSettings({ wallpaperAssetId: null });
+                      deleteThemeAsset(lockSettings.wallpaperAssetId!);
+                      onNotice("已恢复默认壁纸");
+                    }}
+                  >
+                    <Trash2 size={15} />
+                    清除壁纸
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </ContentDialog>,
         document.querySelector(".phone-shell") ?? document.body

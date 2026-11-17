@@ -1,6 +1,6 @@
 // lib/lockscreen-settings.ts — 锁屏（进入页）设置
-// 持久化：是否隐藏锁屏。锁屏本身固定为初始样式（氛围渐变 + 大时钟），
-// 不再支持自定义壁纸/签名，避免多余状态残留。
+// 持久化：是否隐藏锁屏、锁屏壁纸。锁屏支持灰白渐变或用户上传的壁纸图，
+// 上传图片走主题资源库（type: "bg"），避免锁屏数据冗余。
 "use client";
 
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
@@ -13,10 +13,13 @@ export const LOCK_SCREEN_EVENT = "lock-screen-settings-change";
 export type LockScreenSettings = {
     /** 为 true 时开机跳过锁屏，直接进入桌面 */
     hidden: boolean;
+    /** 锁屏壁纸图片资源 ID（指向主题资源库），null = 使用默认灰白渐变 */
+    wallpaperAssetId: string | null;
 };
 
 export const DEFAULT_LOCK_SCREEN_SETTINGS: LockScreenSettings = {
     hidden: false,
+    wallpaperAssetId: null,
 };
 
 export function loadLockScreenSettings(): LockScreenSettings {
@@ -27,6 +30,7 @@ export function loadLockScreenSettings(): LockScreenSettings {
         const parsed = JSON.parse(raw) as Partial<LockScreenSettings>;
         return {
             hidden: parsed.hidden === true,
+            wallpaperAssetId: typeof parsed.wallpaperAssetId === "string" && parsed.wallpaperAssetId ? parsed.wallpaperAssetId : null,
         };
     } catch {
         return { ...DEFAULT_LOCK_SCREEN_SETTINGS };

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp } from "lucide-react";
+import { getThemeAssetMap } from "@/lib/theme-storage";
+import { loadLockScreenSettings, LOCK_SCREEN_EVENT } from "@/lib/lockscreen-settings";
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"] as const;
 
@@ -19,14 +20,40 @@ function useNow() {
 }
 
 /**
- * 锁屏（进入页）：初始样式锁屏。
- * - 默认奶油色渐变氛围底 + 颗粒噪点，大时钟 + 日期
- * - 上滑或点击底部按钮进入桌面
- * - 是否显示由「主题 → 锁屏 → 隐藏锁屏」控制（隐藏后直接进桌面）
+ * 锁屏（进入页）：苹果灰白极简风格
+ * - 默认灰白渐变底 + 细腻颗粒噪点，大时钟 + 日期
+ * - 支持上传本地壁纸作为背景
+ * - 上滑或点击底部按钮丝滑进入桌面
  */
 export function LockScreen({ ready = false, onEnter }: { ready?: boolean; onEnter?: () => void }) {
     const now = useNow();
     const gestureRef = useRef<{ y: number; active: boolean }>({ y: 0, active: false });
+    const [wallpaperAssetId, setWallpaperAssetId] = useState<string | null>(null);
+    const [wallpaperUrl, setWallpaperUrl] = useState<string | null>(null);
+
+    // 加载锁屏壁纸设置
+    useEffect(() => {
+        const settings = loadLockScreenSettings();
+        setWallpaperAssetId(settings.wallpaperAssetId);
+        
+        const handleLockScreenChange = () => {
+            const updated = loadLockScreenSettings();
+            setWallpaperAssetId(updated.wallpaperAssetId);
+        };
+        window.addEventListener(LOCK_SCREEN_EVENT, handleLockScreenChange);
+        return () => window.removeEventListener(LOCK_SCREEN_EVENT, handleLockScreenChange);
+    }, []);
+
+    // 根据壁纸 ID 获取图片 Data URL
+    useEffect(() => {
+        if (!wallpaperAssetId) {
+            setWallpaperUrl(null);
+            return;
+        }
+        getThemeAssetMap([wallpaperAssetId]).then((assets) => {
+            setWallpaperUrl(assets[wallpaperAssetId] || null);
+        }).catch(() => setWallpaperUrl(null));
+    }, [wallpaperAssetId]);
 
     const tryEnter = () => {
         if (!ready) return;
@@ -47,14 +74,18 @@ export function LockScreen({ ready = false, onEnter }: { ready?: boolean; onEnte
     return (
         <div
             className="lock-screen"
-            data-variant="default"
+            data-variant="ios-gray"
             data-ready={ready ? "true" : "false"}
             onPointerDown={onPointerDown}
             onPointerUp={onPointerUp}
             role="button"
             aria-label={ready ? "上滑或点击进入桌面" : "加载中"}
         >
-            <div className="lock-screen-wall lock-screen-default-wall" />
+            {wallpaperUrl ? (
+                <div className="lock-screen-wall" style={{ backgroundImage: `url(${wallpaperUrl})` }} />
+            ) : (
+                <div className="lock-screen-wall lock-screen-default-wall" />
+            )}
             <div className="lock-screen-dim" />
             <div className="lock-screen-grain" />
 
@@ -70,7 +101,9 @@ export function LockScreen({ ready = false, onEnter }: { ready?: boolean; onEnte
 
                 <button type="button" className="lock-screen-enter" onClick={tryEnter} disabled={!ready}>
                     <span className="lock-screen-enter-pill">
-                        <ArrowUp size={20} strokeWidth={1.6} />
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="18 15 12 9 6 15" />
+                        </svg>
                     </span>
                     <span className="lock-screen-enter-label">{ready ? "上滑进入" : "加载中…"}</span>
                 </button>
