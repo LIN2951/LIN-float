@@ -196,7 +196,7 @@
   white-space: nowrap;
 }
 .chat-list-tab.active {
-  background: var(--c-action-blue, #246bfd);
+  background: var(--c-icon-active);
   color: #fff;
   font-weight: 600;
   box-shadow: none;
@@ -214,7 +214,7 @@
   transition: background-color 0.2s, transform 0.15s;
 }
 .minimal-list-item.chat-pinned {
-  background: color-mix(in srgb, var(--c-action-blue, #246bfd) 4.5%, var(--c-page-body-bg));
+  background: color-mix(in srgb, var(--c-icon-active) 4.5%, var(--c-page-body-bg));
 }
 .minimal-list-item:active {
   background: color-mix(in srgb, var(--c-icon) 8%, transparent);
@@ -239,7 +239,7 @@
   z-index: 1;
 }
 .minimal-unread-count {
-  background: var(--c-action-blue, #246bfd);
+  background: var(--c-icon-active);
   color: #fff;
   font-size: calc(9px*var(--app-text-scale,1));
   font-weight: 700;
@@ -1015,11 +1015,12 @@
 }
 .chat-bubble-role-user {
   background: var(--c-bubble-self);
-  color: #fff;
+  color: var(--c-text-title);
 }
 .chat-bubble-role-assistant {
   background: var(--c-bubble-other);
   color: var(--c-text-title);
+  border: 1px solid var(--c-card-border);
 }
 
 /* ── Context menu ── */

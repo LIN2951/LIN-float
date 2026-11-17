@@ -275,25 +275,25 @@ html[data-music-theme="light"] {
 
 /* ═══════════════════════════════════════════
    聊天 App 独立色板 (.chat-app)
-   与全局主题隔离，修改全局色不影响聊天页面
+   苹果灰白极简风格，与全局主题隔离
    用户可通过聊天页面 CSS 编辑器覆盖
    ═══════════════════════════════════════════ */
 .chat-app {
   --c-header-bg: #FFFFFF;
-  --c-page-body-bg: #FAFAFA;
+  --c-page-body-bg: #F5F5F7;
   --c-card: #FFFFFF;
-  --c-card-border: #F0F0F0;
-  --c-polaroid: #FEFEFE;
-  --c-polaroid-back: #F0F0F0;
+  --c-card-border: #E5E5EA;
+  --c-polaroid: #FFFFFF;
+  --c-polaroid-back: #F2F2F2;
   --c-panel: #FFFFFF;
-  --c-panel-border: #D9DADB;
-  --c-text-title: #2C3440;
-  --c-text: #797E85;
-  --c-icon-active: #4A4A4A;
-  --c-icon: #A0A3A8;
-  --c-input: #EBEBEB;
-  --c-input-border: #DADBDF;
-  --c-bubble-self: var(--c-action-blue, #246bfd);
+  --c-panel-border: #D9D9D9;
+  --c-text-title: #1C1C1E;
+  --c-text: #8E8E93;
+  --c-icon-active: #3A3A3C;
+  --c-icon: #C7C7CC;
+  --c-input: #F2F2F2;
+  --c-input-border: #E5E5EA;
+  --c-bubble-self: #E8E8ED;
   --c-bubble-other: #FFFFFF;
   --c-success: #34C759;
   --c-danger: #FF3B30;
