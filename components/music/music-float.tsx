@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMusicPlayerOptional, type MusicControlsValue } from "@/lib/music-context";
+import { hydrateKvDb } from "@/lib/kv-db";
 import {
     DEFAULT_MUSIC_FLOAT_SIZES,
     DEFAULT_MUSIC_FLOAT_VISIBILITY,
@@ -715,7 +716,32 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
         window.addEventListener(MUSIC_FLOAT_MODE_EVENT, onModeChange);
         window.addEventListener(MUSIC_FLOAT_SIZES_EVENT, onSizesChange);
         window.addEventListener(MUSIC_FLOAT_VISIBILITY_EVENT, onVisibilityChange);
+
+        // 本组件挂载时 KV 内存缓存可能还没从 IndexedDB 水合完成，
+        // 这时 loadMusicFloatVisibility() 读到的是默认值（orb+island 都显示），
+        // 用户保存的「仅悬浮球 / 仅灵动岛 / 全部隐藏」被默认值顶掉。
+        // 水合完成后（以及兜底轮询几次）重读一次，让保存的选择真正生效。
+        let cancelled = false;
+        const refreshFromStorage = () => {
+            if (cancelled) return;
+            const next = loadMusicFloatVisibility();
+            setVisible(prev => (prev.orb === next.orb && prev.island === next.island ? prev : next));
+            setMode(loadMusicFloatMode());
+            setSizes(loadMusicFloatSizes());
+        };
+        void hydrateKvDb().then(refreshFromStorage).catch(() => undefined);
+        const retryTimers = [300, 1200, 3000].map(ms => window.setTimeout(refreshFromStorage, ms));
+
+        // 多标签页场景：另一个标签页改了设置，通过 localStorage 镜像同步过来
+        const onStorage = (e: StorageEvent) => {
+            if (e.key === "music-float-visibility-v1") refreshFromStorage();
+        };
+        window.addEventListener("storage", onStorage);
+
         return () => {
+            cancelled = true;
+            retryTimers.forEach(t => window.clearTimeout(t));
+            window.removeEventListener("storage", onStorage);
             window.removeEventListener(MUSIC_FLOAT_MODE_EVENT, onModeChange);
             window.removeEventListener(MUSIC_FLOAT_SIZES_EVENT, onSizesChange);
             window.removeEventListener(MUSIC_FLOAT_VISIBILITY_EVENT, onVisibilityChange);
