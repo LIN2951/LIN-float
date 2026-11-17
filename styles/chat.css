@@ -228,15 +228,7 @@
   flex-shrink: 0;
 }
 .minimal-online-dot {
-  position: absolute;
-  bottom: 0px;
-  right: 0px;
-  width: 8px;
-  height: 8px;
-  background: #2dd36f;
-  border: 1px solid var(--c-page-body-bg);
-  border-radius: 50%;
-  z-index: 1;
+  display: none;
 }
 .minimal-unread-count {
   background: var(--c-icon-active);
