@@ -1399,31 +1399,29 @@
 
 .music-status-island {
     position: absolute;
-    top: max(8px, env(safe-area-inset-top));
+    top: max(6px, env(safe-area-inset-top));
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 8px;
-    width: min(148px, 42%);
-    height: 36px;
-    padding: 0 10px 0 5px;
+    gap: 7px;
+    width: min(138px, 38%);
+    height: 32px;
+    padding: 0 10px 0 4px;
     box-sizing: border-box;
     border: none;
     border-radius: 999px;
-    background:
-        linear-gradient(150deg, var(--mi-accent-soft, rgba(255, 255, 255, 0.08)), transparent 68%),
-        rgba(255, 255, 255, 0.26);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    background: rgba(255, 255, 255, 0.22);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
     color: #2b2b33;
     pointer-events: auto;
     cursor: pointer;
     overflow: hidden;
     touch-action: none;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.6);
-    transition: background 0.45s ease, box-shadow 0.45s ease;
-    animation: music-status-island-in 0.28s var(--ease-out);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    animation: music-status-island-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .music-status-island-cover {
@@ -1499,30 +1497,26 @@
 
 .music-dynamic-island-panel {
     position: absolute;
-    top: max(8px, env(safe-area-inset-top));
+    top: max(6px, env(safe-area-inset-top));
     left: 50%;
-    width: 300px;
-    height: 128px;
-    max-width: calc(100% - 28px);
+    width: 290px;
+    height: 112px;
+    max-width: calc(100% - 24px);
     box-sizing: border-box;
-    padding: 12px 14px;
-    border-radius: 28px;
+    padding: 10px 12px;
+    border-radius: 22px;
     overflow: hidden;
     transform: translateX(-50%);
-    background:
-        linear-gradient(150deg, var(--mi-accent-soft, rgba(255, 255, 255, 0.08)), transparent 70%),
-        rgba(255, 255, 255, 0.28);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    background: rgba(255, 255, 255, 0.28);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
     color: #2b2b33;
     pointer-events: auto;
     cursor: pointer;
     touch-action: none;
-    box-shadow:
-        inset 0 0 0 1px var(--mi-accent-soft, rgba(255, 255, 255, 0.1)),
-        inset 0 1px 0 rgba(255, 255, 255, 0.6);
-    transition: background 0.45s ease, box-shadow 0.45s ease;
-    animation: music-dynamic-island-expand 0.34s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    animation: music-dynamic-island-expand 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .music-dynamic-island-panel[data-closing] {
@@ -1546,10 +1540,10 @@
 }
 
 .music-dynamic-island-cover {
-    width: 40px;
-    height: 40px;
-    flex: 0 0 40px;
-    border-radius: 12px;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    border-radius: 9px;
     overflow: hidden;
     background: rgba(255, 255, 255, 0.08);
 }
@@ -1566,8 +1560,8 @@
 }
 
 .music-dynamic-island-title {
-    font-size: calc(13px * var(--app-text-scale, 1));
-    font-weight: 600;
+    font-size: calc(12px * var(--app-text-scale, 1));
+    font-weight: 500;
     color: #2b2b33;
     white-space: nowrap;
     overflow: hidden;
@@ -1575,9 +1569,9 @@
 }
 
 .music-dynamic-island-artist {
-    margin-top: 2px;
-    font-size: calc(10px * var(--app-text-scale, 1));
-    color: rgba(43, 43, 51, 0.58);
+    margin-top: 1px;
+    font-size: calc(9px * var(--app-text-scale, 1));
+    color: rgba(43, 43, 51, 0.5);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

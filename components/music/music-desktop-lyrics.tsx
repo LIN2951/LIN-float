@@ -105,12 +105,16 @@ export function CloudLikeButton({ player }: { player: MusicControlsValue | null 
         e.stopPropagation();
         if (!songId || busy) return;
         const next = !liked;
+        // 乐观更新：点击瞬间立刻切换红心状态，保证零延迟、绝对丝滑！
+        setLiked(next);
         setBusy(true);
         const res = await setCloudSongLiked(songId, next);
         if (res.ok) {
             setLiked(next);
             setMessage("");
         } else {
+            // 如果接口失败，回滚状态并提示错误
+            setLiked(!next);
             setMessage(res.message || "操作失败");
             window.setTimeout(() => setMessage(""), 2600);
         }
