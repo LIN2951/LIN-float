@@ -484,10 +484,12 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             if (src === "free") {
                 playUrl = await getFreePlayUrl(track, bases);
             } else {
-                playUrl = await getNeteasePlayUrl(nid);
-                // Netease returned nothing (VIP / no copyright) — try the free
-                // aggregation source so the song can still play fully.
-                if (!playUrl) playUrl = await getFreePlayUrl(track, bases);
+                // 并行发起：同时请求官方 API 和免费聚合源，谁先返回可用 URL 就先用谁，大幅缩短等待时间！
+                const [officialUrl, freeUrl] = await Promise.all([
+                    getNeteasePlayUrl(nid).catch(() => null),
+                    getFreePlayUrl(track, bases).catch(() => null),
+                ]);
+                playUrl = officialUrl || freeUrl;
             }
             if (token !== switchTokenRef.current) return; // 期间又切了别的歌
             if (!playUrl) {

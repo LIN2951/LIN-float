@@ -285,12 +285,6 @@ export async function getNeteasePlayInfo(songId: number): Promise<NeteasePlayInf
         if (fee === 4) {
             return { url: null, trial: false, reason: "付费专辑歌曲，需购买后才能播放" };
         }
-        // Ask check/music for a human-readable reason (e.g. 无版权)
-        try {
-            const chk = await fetch(withNeteaseParams(`${base}/check/music?id=${songId}&timestamp=${Date.now()}`)).then(r => r.json());
-            const msg = chk?.message ? String(chk.message).replace(/^亲爱的[,，]?/, "").trim() : "";
-            if (chk?.success === false && msg) return { url: null, trial: false, reason: msg };
-        } catch { /* check endpoint unavailable — fall through */ }
         return { url: null, trial: false, reason: "该歌曲暂时无法播放" };
     } catch (e) {
         console.warn("[MusicService] Get play URL failed:", e);
