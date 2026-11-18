@@ -97,6 +97,13 @@ export default function CSSSchemeBar({ target, onLoad, currentCSS, btnStyle, mod
       >
         <FolderOpen size={15} />
       </button>
+      <button
+        onClick={() => onLoad("")}
+        title="清除美化（恢复默认UI）"
+        style={{ ...btn, color: "var(--c-icon-active, #4A4A4A)" }}
+      >
+        <X size={15} />
+      </button>
       <CSSImportButton onImport={onLoad} buttonStyle={btn} />
 
       {modal && portalTarget ? createPortal(
